@@ -12,6 +12,6 @@ echo "Changing directory to chrono-docker..."
 cd chrono-docker
 
 echo "Running atk development setup..."
-atk dev -dbua -s chrono -o x11 gpus
+sudo atk dev -dbua -s chrono -o x11 gpus
 
 echo "Setup complete."
