@@ -6,9 +6,11 @@ Run `git lfs pull`
 
 ### 2. Install [Docker Engine](https://docs.docker.com/engine/install/ubuntu/)
 Run `sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin`
+
 ### 3. Install [Autonomy-Toolkit (atk)](https://pypi.org/project/autonomy-toolkit/)
 Run `pip install autonomy-toolkit`
-### 4. Add atk install dir to $PATH
+
+#### (Sometimes you have to use sudo pip install then followed by pip install to fix installation issues for atk)
 
 ### 5. Install [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
