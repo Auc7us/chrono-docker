@@ -10,7 +10,7 @@ Run `sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-pl
 ### 3. Install [Autonomy-Toolkit (atk)](https://pypi.org/project/autonomy-toolkit/)
 Run `pip install autonomy-toolkit`
 
-#### (Sometimes you have to use sudo pip install then followed by pip install to fix installation issues for atk)
+#### (Sometimes you have to use sudo pip install followed by pip install to fix installation issues for atk)
 
 ### 5. Install [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
