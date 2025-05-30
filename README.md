@@ -42,7 +42,7 @@ sudo apt install python3-venv -y
     ```
 
 
-### 6. Run
+### 6. Run Container
 
 - __To spin up and attach to the container__
  
@@ -55,3 +55,9 @@ sudo apt install python3-venv -y
     ```
     atk dev -dbua -s chrono -o x11 gpus
     ```
+
+- Understanding -dbua flags:
+    - d :  Stop and remove containers (docker compose down)
+    - b : build docker image (docker build)
+    - u : spin up a new docker container (docker compose up)
+    - a : attach to a running docker container (docker exec or docker attach)
