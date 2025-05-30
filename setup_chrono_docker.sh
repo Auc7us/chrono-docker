@@ -27,5 +27,5 @@ cd ..
 echo "Running atk development setup..."
 atk dev -dbua -s chrono -o x11 gpus
 
-echo "Setup complete; Please run buildChronoInMount.sh located at ~/mountDrive inside the container
+echo "Setup complete; Please run buildChronoInMount.sh located at /home/chrono-user/mountdir/ inside the container
  to build Chrono in a persistent mount directory on host"

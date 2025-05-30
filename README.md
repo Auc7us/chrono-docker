@@ -27,22 +27,31 @@ sudo apt install python3-venv -y
 ### 4. Install [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) 
 
 ### 5. Setup
+- __Build the docker image__
  
-```
-chmod +x setup_chrono_docker.sh
-./setup_chrono_docker.sh
-```
+    ```
+    chmod +x setup_chrono_docker.sh
+    ./setup_chrono_docker.sh
+    ```
+
+-  __Inside the container, build Chrono in the persistent mount directory on host using :__
+    ```
+    cd ..
+    chmod +x buildChronoInMount.sh
+    ./buildChronoInMount.sh
+    ```
+
 
 ### 6. Run
 
-#### To spin up and attach to the container
+- __To spin up and attach to the container__
  
-```
-atk dev -ua -s chrono -o x11 gpus
-```
+    ```
+    atk dev -ua -s chrono -o x11 gpus
+    ```
 
-#### To docker compose down, build, spin up and attach to the container
+- __To docker compose down, build, spin up and attach to the container__
  
-```
-atk dev -dbua -s chrono -o x11 gpus
-```
+    ```
+    atk dev -dbua -s chrono -o x11 gpus
+    ```
