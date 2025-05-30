@@ -16,35 +16,32 @@ git lfs pull
 sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
-### 3. Install [Autonomy-Toolkit (atk)](https://pypi.org/project/autonomy-toolkit/)
- 
+### 3. Install Python Venv
 ```
-pip install autonomy-toolkit
+sudo apt update
+sudo apt install python3-venv -y
 ```
 
-#### (Sometimes you have to use sudo pip install followed by pip install to fix installation issues for atk)
+##### Note: You might have to use sudo pip install autonomy-toolkit followed by pip install autonomy-toolkit to fix installation issues for atk.
 
-### 5. Install [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+### 4. Install [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) 
 
-### 5. Make the script executable
+### 5. Setup
  
 ```
 chmod +x setup_chrono_docker.sh
-```
-
-### 6. Setup
- 
-```
 ./setup_chrono_docker.sh
 ```
 
-### To spin up and attach to the container
+### 6. Run
+
+#### To spin up and attach to the container
  
 ```
 atk dev -ua -s chrono -o x11 gpus
 ```
 
-### To docker compose down, build, spin up and attach to the container
+#### To docker compose down, build, spin up and attach to the container
  
 ```
 atk dev -dbua -s chrono -o x11 gpus

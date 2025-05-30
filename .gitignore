@@ -2,3 +2,4 @@ chrono-docker/
 chrono-docker-old.zip
 chrono-orb/
 .old_stuff/
+.chrono-env/
