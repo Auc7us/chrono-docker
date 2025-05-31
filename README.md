@@ -74,13 +74,13 @@ sudo apt install python3-venv -y
 - __Inside the container__
     - Python demos
         ```
-        cd ~/mountdir/chrono/src/demos/python/ros/
-        python3 demo_ROS_viper.py
+        cd ~/mountdir/chrono/src/demos/python/robot/
+        python3 demo_ROBOT_Viper_Rigid.py
         ```
     - C++ demos 
         ```
         cd ~/mountdir/chrono/build/bin/
-        ./demo_ROS_viper
+        ./demo_ROBOT_Viper_Rigid
         ```
 ---
 
