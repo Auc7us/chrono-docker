@@ -1,0 +1,104 @@
+name: chrono
+networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME}
+services:
+  chrono:
+    build:
+      args:
+        APT_DEPENDENCIES: python3.10 python3.10-dev python3-pip libirrlicht-dev libnvidia-gl-515
+          libeigen3-dev git cmake cmake-curses-gui libglu1-mesa-dev mesa-common-dev
+          swig libglew-dev freeglut3-dev libglfw3 libglfw3-dev x11proto-gl-dev libxxf86vm-dev
+          openmpi-common libopenmpi-dev ninja-build python3-numpy ros-${ROS_DISTRO}-ros-base
+          python3-colcon-common-extensions libglew-dev
+        CUDA_VERSION: 12.2.0
+        OPTIX_SCRIPT: NVIDIA-OptiX-SDK-7.7.0-linux64-x86_64.sh
+        PROJECT: ${COMPOSE_PROJECT_NAME}
+        ROS_DISTRO: ${ROS_DISTRO}
+        UBUNTU_VERSION: '22.04'
+      context: ./docker/chrono
+      dockerfile: ./chrono.dockerfile
+      network: host
+    container_name: ${COMPOSE_PROJECT_NAME}-orb2
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - capabilities:
+            - gpu
+            count: 1
+            driver: nvidia
+    environment:
+      DISPLAY: ${DISPLAY}
+      NVIDIA_DRIVER_CAPABILITIES: all
+      NVIDIA_VISIBLE_DEVICES: all
+    hostname: ${COMPOSE_PROJECT_NAME}-orb2
+    image: atk/${COMPOSE_PROJECT_NAME}:orb2
+    tty: true
+    volumes:
+    - bind:
+        create_host_path: true
+      source: ./${MOUNT_DIR}
+      target: /home/${ATK_CONTAINER_USERNAME}/${MOUNT_DIR}
+      type: bind
+    - /tmp/.X11-unix:/tmp/.X11-unix
+    working_dir: /home/${ATK_CONTAINER_USERNAME}/${MOUNT_DIR}
+  vnc:
+    build:
+      args:
+        RUN_FLUXBOX: 'yes'
+        RUN_XTERM: 'yes'
+        VNC_PASSWORD: ${COMPOSE_PROJECT_NAME}
+      context: ./docker/vnc
+      dockerfile: ./vnc.dockerfile
+      network: host
+    container_name: ${COMPOSE_PROJECT_NAME}-vnc
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - capabilities:
+            - gpu
+            count: 1
+            driver: nvidia
+    environment:
+      DISPLAY: ${DISPLAY}
+      NVIDIA_DRIVER_CAPABILITIES: all
+      NVIDIA_VISIBLE_DEVICES: all
+      RUN_FLUXBOX: 'yes'
+      RUN_XTERM: 'no'
+    hostname: ${COMPOSE_PROJECT_NAME}-vnc
+    image: atk/${COMPOSE_PROJECT_NAME}:vnc
+    ports:
+    - host_ip: 127.0.0.1
+      mode: ingress
+      protocol: tcp
+      published: 8080-8099
+      target: 8080
+    - host_ip: 127.0.0.1
+      mode: ingress
+      protocol: tcp
+      published: 5900-5999
+      target: 5900
+    volumes:
+    - /tmp/.X11-unix:/tmp/.X11-unix
+x-optionals:
+  gpus:
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - capabilities:
+            - gpu
+            count: 1
+            driver: nvidia
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: all
+      NVIDIA_VISIBLE_DEVICES: all
+  network_mode_host:
+    network_mode: host
+  x11:
+    environment:
+      DISPLAY: ${DISPLAY}
+    volumes:
+    - /tmp/.X11-unix:/tmp/.X11-unix

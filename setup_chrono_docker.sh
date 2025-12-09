@@ -15,12 +15,9 @@ pip install autonomy-toolkit
 echo "Installing additional python dependencies"
 pip install numpy pandas
 
-echo "Extracting chrono-orb.zip..."
-unzip chrono-docker.zip
-
 echo "Changing directory to chrono-docker..."
 cd chrono-docker/mountdir
-git clone -b 9.0.1 https://github.com/Auc7us/chrono.git
+git clone -b main https://github.com/projectchrono/chrono.git
 
 cd ..
 

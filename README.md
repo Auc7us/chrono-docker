@@ -1,5 +1,9 @@
-# Docker container with Chrono 9.0.1 with ROS2 Humble and PyChrono
-### 1. Clone the repository
+# Docker container with Chrono-main with ROS2 Humble and PyChrono
+
+## Installation
+---
+### Pre-requisites:
+#### 1. Clone the repository
  
 ```
 git clone https://github.com/Auc7us/chrono-docker/
@@ -10,14 +14,14 @@ git clone https://github.com/Auc7us/chrono-docker/
 git lfs pull
 ```
 
-### 2. Install [Docker Engine](https://docs.docker.com/engine/install/ubuntu/)
+#### 2. Install [Docker Engine](https://docs.docker.com/engine/install/ubuntu/)
  
 ```
 sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
-### 3. Install [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) 
+#### 3. Install [Nvidia Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) 
 
-### 4. Install Python Venv
+#### 4. Install Python Venv
 ```
 sudo apt update
 sudo apt install python3-venv -y
@@ -26,7 +30,7 @@ sudo apt install python3-venv -y
 <!-- ##### Note: You might have to use sudo pip install autonomy-toolkit followed by pip install autonomy-toolkit to fix installation issues for atk. -->
 
 
-### 5. Setup
+### Setup
 - __Build the docker image__
  
     ```
@@ -42,7 +46,8 @@ sudo apt install python3-venv -y
     ```
 
 
-### 6. Using the container
+## Usage Instructions 
+---
 
 - __Activate the pip3 virtual env to use atk__
     ```
