@@ -19,7 +19,7 @@ services:
       context: ./docker/chrono
       dockerfile: ./chrono.dockerfile
       network: host
-    container_name: ${COMPOSE_PROJECT_NAME}-orb2
+    container_name: ${COMPOSE_PROJECT_NAME}-orb
     deploy:
       resources:
         reservations:
@@ -32,8 +32,10 @@ services:
       DISPLAY: ${DISPLAY}
       NVIDIA_DRIVER_CAPABILITIES: all
       NVIDIA_VISIBLE_DEVICES: all
-    hostname: ${COMPOSE_PROJECT_NAME}-orb2
-    image: atk/${COMPOSE_PROJECT_NAME}:orb2
+    hostname: ${COMPOSE_PROJECT_NAME}-orb
+    image: atk/${COMPOSE_PROJECT_NAME}:orb
+    ipc: host
+    shm_size: 6g
     tty: true
     volumes:
     - bind:
@@ -42,7 +44,7 @@ services:
       target: /home/${ATK_CONTAINER_USERNAME}/${MOUNT_DIR}
       type: bind
     - /tmp/.X11-unix:/tmp/.X11-unix
-    working_dir: /home/${ATK_CONTAINER_USERNAME}/${MOUNT_DIR}
+    working_dir: /home/${ATK_CONTAINER_USERNAME}/${MOUNT_DIR}/chrono
   vnc:
     build:
       args:

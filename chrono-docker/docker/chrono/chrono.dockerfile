@@ -6,7 +6,7 @@ ARG IMAGE_TAG=${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
 
 FROM nvidia/cuda:12.2.0-devel-ubuntu22.04
 
-LABEL maintainer="UW Simulation Based Engineering Laboratory <negrut@wisc.edu>"
+LABEL maintainer="UW Simulation Based Engineering Laboratory <pachipala@wisc.edu>"
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -19,16 +19,47 @@ ARG USERHOME="/home/${USERNAME}"
 ARG USERSHELL="bash"
 ARG USERSHELLPATH="/bin/${USERSHELL}"
 ARG USERSHELLPROFILE="${USERHOME}/.${USERSHELL}rc"
+ARG ROS_DISTRO="humble"
 
 # Add ROS GPG key and to the sources list
 RUN apt update && \
-        apt install curl -y && \
+        apt install --no-install-recommends -y curl gnupg lsb-release software-properties-common ca-certificates && \
+        add-apt-repository universe && \
         curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
 
-# Install dependencies
+# Install dependencies (Chrono common + build + ROS base)
 ARG APT_DEPENDENCIES=""
-RUN apt-get update && apt-get install --no-install-recommends -y python3-pip sudo ${APT_DEPENDENCIES}
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    python3-pip \
+    sudo \
+    git \
+    cmake \
+    build-essential \
+    ninja-build \
+    swig \
+    libirrlicht-dev \
+    libeigen3-dev \
+    libxxf86vm-dev \
+    freeglut3-dev \
+    python3-numpy \
+    libglu1-mesa-dev \
+    libglew-dev \
+    libglfw3-dev \
+    libblas-dev \
+    liblapack-dev \
+    wget \
+    xorg-dev \
+    python3-colcon-common-extensions \
+    ros-${ROS_DISTRO}-ros-base \
+    ${APT_DEPENDENCIES}
+
+# Vulkan SDK for Chrono::VSG
+RUN wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | tee /etc/apt/trusted.gpg.d/lunarg.asc && \
+    UBUNTU_CODENAME=$(lsb_release -cs) && \
+    wget -qO /etc/apt/sources.list.d/lunarg-vulkan.list "http://packages.lunarg.com/vulkan/lunarg-vulkan-${UBUNTU_CODENAME}.list" && \
+    apt update && \
+    apt install --no-install-recommends -y vulkan-sdk
 
 # Clean up to reduce image size
 RUN apt-get clean && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
@@ -67,14 +98,6 @@ RUN chmod +x /tmp/optix.sh && \
 
 RUN apt-get update && apt-get install -y nano
 
-WORKDIR ${USERHOME}
-RUN apt update && \
-    apt install wget -y && \
-    wget https://bitbucket.org/blaze-lib/blaze/downloads/blaze-3.8.tar.gz && \
-    tar -xvzf blaze-3.8.tar.gz && \
-    mv blaze-3.8/blaze /usr/local/include/ && \
-    rm -r blaze-3.8 blaze-3.8.tar.gz
-
 # chrono_ros_interfaces
 USER ${USERNAME}
 
@@ -82,7 +105,7 @@ ARG ROS_WORKSPACE_DIR="${USERHOME}/ros2_ws"
 ARG CHRONO_ROS_INTERFACES_DIR="${ROS_WORKSPACE_DIR}/src/chrono_ros_interfaces"
 RUN mkdir -p ${CHRONO_ROS_INTERFACES_DIR} && \
     git clone https://github.com/projectchrono/chrono_ros_interfaces.git ${CHRONO_ROS_INTERFACES_DIR} 
-RUN /bin/bash -c "source /opt/ros/humble/setup.bash && cd ${ROS_WORKSPACE_DIR} && colcon build"
+RUN /bin/bash -c "source /opt/ros/${ROS_DISTRO}/setup.bash && cd ${ROS_WORKSPACE_DIR} && colcon build"
 
 # User config
 USER ${USERNAME}
@@ -90,7 +113,7 @@ USER ${USERNAME}
 # Default bash config
 RUN mkdir -p ${USERHOME} && touch ${USERSHELLPROFILE}
 RUN if [ "${USERSHELL}" = "bash" ]; then \
-        echo 'export TERM=xterm-256color' >> ${USERSHELLPROFILE}; \ 
+        echo 'export TERM=xterm-256color' >> ${USERSHELLPROFILE}; \
         echo 'export PS1="\[\033[38;5;40m\]\h\[$(tput sgr0)\]:\[$(tput sgr0)\]\[\033[38;5;39m\]\w\[$(tput sgr0)\]\\$ \[$(tput sgr0)\]"' >> ${USERSHELLPROFILE}; \
     fi
 
@@ -98,12 +121,14 @@ WORKDIR ${USERHOME}
 ENV HOME=${USERHOME}
 ENV USERSHELLPATH=${USERSHELLPATH}
 ENV USERSHELLPROFILE=${USERSHELLPROFILE}
-RUN echo "export PYTHONPATH=\"$USERHOME/mountdir/chrono/build/bin:\$PYTHONPATH\"" >> ${USERSHELLPROFILE}
+ENV ROS_DISTRO=${ROS_DISTRO}
+RUN echo "export PYTHONPATH=\"${USERHOME}/mountdir/lib/chrono-build/share/chrono/python:${USERHOME}/mountdir/chrono/build/bin:\$PYTHONPATH\"" >> ${USERSHELLPROFILE}
+RUN echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:${USERHOME}/packages/vsg/lib:${USERHOME}/packages/urdf/lib" >> ${USERSHELLPROFILE}
 
 CMD ${USERSHELLPATH}
 
 # Source ROS setup.bash and build chrono_ros_interfaces during the container build process
-RUN echo "source /opt/ros/humble/setup.sh" >> ${USERSHELLPROFILE}
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.sh" >> ${USERSHELLPROFILE}
 RUN echo "source ${ROS_WORKSPACE_DIR}/install/setup.sh" >> ${USERSHELLPROFILE}
 
 
