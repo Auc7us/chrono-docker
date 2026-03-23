@@ -49,6 +49,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     libblas-dev \
     liblapack-dev \
     wget \
+    unzip \
     xorg-dev \
     xauth \
     python3-colcon-common-extensions \
@@ -91,15 +92,12 @@ RUN if [ -n "${USER_GROUPS}" ]; then \
 			done; \
     fi
 
-# Move optix file into docker container
-ARG OPTIX_SCRIPT
-COPY ${OPTIX_SCRIPT} /tmp/optix.sh
+# Copy the packaged OptiX installer into the image; buildChronoInMount.sh extracts it on demand.
+ARG OPTIX_ARCHIVE
+COPY ${OPTIX_ARCHIVE} /opt/optix-installer/sensor-dep.zip
 COPY ros_entrypoint.sh /opt/ros_entrypoint.sh
-RUN chmod +x /tmp/optix.sh && \
-        chmod +x /opt/ros_entrypoint.sh && \
-        mkdir /opt/optix && \
-        /tmp/optix.sh --prefix=/opt/optix --skip-license && \
-        rm /tmp/optix.sh
+RUN chmod +x /opt/ros_entrypoint.sh && \
+        mkdir -p /opt/optix-installer
 
 RUN apt-get update && apt-get install -y nano
 

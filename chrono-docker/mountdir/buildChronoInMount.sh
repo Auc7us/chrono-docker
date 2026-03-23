@@ -12,6 +12,8 @@ LOCAL_BLAZE_INCLUDE_DIR="${PACKAGE_DIR}/blaze-3.8.2"
 BLAZE_INCLUDE_DIR=${BLAZE_INCLUDE_DIR:-${LOCAL_BLAZE_INCLUDE_DIR}}
 URDF_PREFIX="${PACKAGE_DIR}/urdf"
 VSG_PREFIX="${PACKAGE_DIR}/vsg"
+OPTIX_ARCHIVE_PATH=${OPTIX_ARCHIVE_PATH:-"/opt/optix-installer/sensor-dep.zip"}
+OPTIX_INSTALL_DIR=${OPTIX_INSTALL_DIR:-"/opt/optix"}
 
 die() {
     echo "Error: $*" >&2
@@ -77,6 +79,35 @@ ensure_blaze_headers() {
     echo "Blaze headers installed to ${BLAZE_INCLUDE_DIR}"
 }
 
+
+ensure_optix_installed() {
+    local tmp_optix
+    local installer_path
+
+    if [ -f "${OPTIX_INSTALL_DIR}/include/optix.h" ]; then
+        echo "Using OptiX installation from ${OPTIX_INSTALL_DIR}"
+        return
+    fi
+
+    [ -f "${OPTIX_ARCHIVE_PATH}" ] || die "OptiX archive not found at ${OPTIX_ARCHIVE_PATH}. Copy sensor-dep.zip into the image before building."
+    command -v unzip >/dev/null 2>&1 || die "unzip is required to extract ${OPTIX_ARCHIVE_PATH}."
+    command -v sudo >/dev/null 2>&1 || die "sudo is required to install OptiX into ${OPTIX_INSTALL_DIR}."
+
+    tmp_optix=$(mktemp -d)
+    unzip -q "${OPTIX_ARCHIVE_PATH}" -d "${tmp_optix}" || die "Unable to extract ${OPTIX_ARCHIVE_PATH}."
+    installer_path=$(find "${tmp_optix}" -maxdepth 2 -type f -name "NVIDIA-OptiX-SDK-*.sh" | head -n 1)
+    [ -n "${installer_path}" ] || die "OptiX archive did not contain an NVIDIA-OptiX-SDK installer."
+
+    chmod +x "${installer_path}"
+    echo "Installing OptiX from ${OPTIX_ARCHIVE_PATH}..."
+    sudo mkdir -p "${OPTIX_INSTALL_DIR}"
+    sudo "${installer_path}" --prefix="${OPTIX_INSTALL_DIR}" --skip-license || die "OptiX installer failed."
+    rm -rf "${tmp_optix}"
+
+    [ -f "${OPTIX_INSTALL_DIR}/include/optix.h" ] || die "OptiX install completed, but ${OPTIX_INSTALL_DIR}/include/optix.h is still missing."
+    echo "OptiX installed to ${OPTIX_INSTALL_DIR}"
+}
+
 cd "$(dirname "$0")"
 cd chrono
 
@@ -84,6 +115,9 @@ mkdir -p "${PACKAGE_DIR}"
 
 echo "Ensuring Blaze 3.8 headers are present..."
 ensure_blaze_headers
+
+echo "Ensuring OptiX is installed..."
+ensure_optix_installed
 
 echo "Ensuring URDF dependencies are built..."
 if [ ! -d "${PACKAGE_DIR}/urdf" ]; then
@@ -133,8 +167,8 @@ cmake ../ -G Ninja \
         -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
         -Dblaze_INCLUDE_DIR=${BLAZE_INCLUDE_DIR} \
         -DEigen3_DIR=/usr/lib/cmake/eigen3 \
-        -DOptiX_INCLUDE_DIR=/opt/optix/include \
-        -DOptiX_INSTALL_DIR=/opt/optix \
+        -DOptiX_INCLUDE_DIR=${OPTIX_INSTALL_DIR}/include \
+        -DOptiX_INSTALL_DIR=${OPTIX_INSTALL_DIR} \
         -Dvsg_DIR=${VSG_PREFIX}/lib/cmake/vsg \
         -DvsgImGui_DIR=${VSG_PREFIX}/lib/cmake/vsgImGui \
         -DvsgXchange_DIR=${VSG_PREFIX}/lib/cmake/vsgXchange \

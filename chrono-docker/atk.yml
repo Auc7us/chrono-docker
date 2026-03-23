@@ -41,7 +41,7 @@ services:
         UBUNTU_VERSION: '22.04'
         USER_UID: '1001'
         USER_GID: '1001'
-        OPTIX_SCRIPT: NVIDIA-OptiX-SDK-9.0.0-linux64-x86_64.sh
+        OPTIX_ARCHIVE: sensor-dep.zip
         ROS_DISTRO: ${ROS_DISTRO}
         APT_DEPENDENCIES: 'python3.10 python3.10-dev python3-pip libirrlicht-dev libeigen3-dev git cmake cmake-curses-gui libglu1-mesa-dev mesa-common-dev swig libglew-dev freeglut3-dev libglfw3 libglfw3-dev x11proto-gl-dev libxxf86vm-dev openmpi-common libopenmpi-dev ninja-build python3-numpy ros-${ROS_DISTRO}-ros-base python3-colcon-common-extensions libfastcdr-dev libfastrtps-dev libglew-dev'
 
