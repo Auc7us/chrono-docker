@@ -21,7 +21,7 @@ services:
       context: ./docker/chrono
       dockerfile: ./chrono.dockerfile
       network: host
-    container_name: ${COMPOSE_PROJECT_NAME}-test
+    container_name: ${COMPOSE_PROJECT_NAME}-orb
     deploy:
       resources:
         reservations:
@@ -37,8 +37,8 @@ services:
       XAUTHORITY: /home/${ATK_CONTAINER_USERNAME}/.Xauthority
       XDG_RUNTIME_DIR: /tmp/runtime-${ATK_CONTAINER_USERNAME}
     gpus: all
-    hostname: ${COMPOSE_PROJECT_NAME}-test
-    image: atk/${COMPOSE_PROJECT_NAME}:test
+    hostname: ${COMPOSE_PROJECT_NAME}-orb
+    image: atk/${COMPOSE_PROJECT_NAME}:orb
     ipc: host
     network_mode: host
     runtime: nvidia

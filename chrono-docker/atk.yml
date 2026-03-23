@@ -26,9 +26,9 @@ x-optionals:
 name: chrono
 services:
   chrono:
-    image: 'atk/${COMPOSE_PROJECT_NAME}:test'
-    hostname: '${COMPOSE_PROJECT_NAME}-test'
-    container_name: '${COMPOSE_PROJECT_NAME}-test'
+    image: 'atk/${COMPOSE_PROJECT_NAME}:orb'
+    hostname: '${COMPOSE_PROJECT_NAME}-orb'
+    container_name: '${COMPOSE_PROJECT_NAME}-orb'
     shm_size: "6g"
     ipc: host
     build:
