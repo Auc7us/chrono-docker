@@ -1,3 +1,4 @@
 .chrono-env/
 chrono-docker/mountdir/chrono/
 chrono-docker/mountdir/lib/chrono-build/
+chrono-docker/mountdir/packages/

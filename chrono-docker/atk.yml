@@ -1,5 +1,7 @@
 x-optionals:
   gpus:
+    gpus: all
+    runtime: nvidia
     deploy:
       resources:
         reservations:
@@ -13,16 +15,20 @@ x-optionals:
   network_mode_host:
     network_mode: 'host'
   x11:
+    network_mode: 'host'
     volumes:
       - '/tmp/.X11-unix:/tmp/.X11-unix'
+      - '${HOME}/.Xauthority:/tmp/host.XAuthority:ro'
     environment:
-      DISPLAY: ${DISPLAY}
+      DISPLAY: ${DISPLAY:-}
+      XAUTHORITY: /home/${ATK_CONTAINER_USERNAME}/.Xauthority
+      XDG_RUNTIME_DIR: /tmp/runtime-${ATK_CONTAINER_USERNAME}
 name: chrono
 services:
   chrono:
-    image: 'atk/${COMPOSE_PROJECT_NAME}:orb'
-    hostname: '${COMPOSE_PROJECT_NAME}-orb'
-    container_name: '${COMPOSE_PROJECT_NAME}-orb'
+    image: 'atk/${COMPOSE_PROJECT_NAME}:test'
+    hostname: '${COMPOSE_PROJECT_NAME}-test'
+    container_name: '${COMPOSE_PROJECT_NAME}-test'
     shm_size: "6g"
     ipc: host
     build:
@@ -31,14 +37,16 @@ services:
       dockerfile: './chrono.dockerfile'
       args:
         PROJECT: ${COMPOSE_PROJECT_NAME}
-        CUDA_VERSION: '12.2.0'
+        CUDA_VERSION: '13.0.0'
         UBUNTU_VERSION: '22.04'
-        OPTIX_SCRIPT: NVIDIA-OptiX-SDK-7.7.0-linux64-x86_64.sh
+        USER_UID: '1001'
+        USER_GID: '1001'
+        OPTIX_SCRIPT: NVIDIA-OptiX-SDK-9.0.0-linux64-x86_64.sh
         ROS_DISTRO: ${ROS_DISTRO}
-        APT_DEPENDENCIES: 'python3.10 python3.10-dev python3-pip libirrlicht-dev libnvidia-gl-515 libeigen3-dev git cmake cmake-curses-gui libglu1-mesa-dev mesa-common-dev swig libglew-dev freeglut3-dev libglfw3 libglfw3-dev x11proto-gl-dev libxxf86vm-dev openmpi-common libopenmpi-dev ninja-build python3-numpy ros-${ROS_DISTRO}-ros-base python3-colcon-common-extensions libglew-dev'
+        APT_DEPENDENCIES: 'python3.10 python3.10-dev python3-pip libirrlicht-dev libeigen3-dev git cmake cmake-curses-gui libglu1-mesa-dev mesa-common-dev swig libglew-dev freeglut3-dev libglfw3 libglfw3-dev x11proto-gl-dev libxxf86vm-dev openmpi-common libopenmpi-dev ninja-build python3-numpy ros-${ROS_DISTRO}-ros-base python3-colcon-common-extensions libfastcdr-dev libfastrtps-dev libglew-dev'
 
     environment:
-      DISPLAY: vnc:0.0
+      DISPLAY: ${DISPLAY:-vnc:0.0}
     working_dir: '/home/${ATK_CONTAINER_USERNAME}/${MOUNT_DIR}/chrono'
     tty: true
     volumes:

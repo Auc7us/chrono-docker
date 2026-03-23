@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: MIT
-ARG CUDA_VERSION
-ARG UBUNTU_VERSION
+ARG CUDA_VERSION=13.0.0
+ARG UBUNTU_VERSION=22.04
 ARG IMAGE_BASE=nvidia/cuda
 ARG IMAGE_TAG=${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION}
 
-FROM nvidia/cuda:12.2.0-devel-ubuntu22.04
+FROM ${IMAGE_BASE}:${IMAGE_TAG}
 
 LABEL maintainer="UW Simulation Based Engineering Laboratory <pachipala@wisc.edu>"
 
@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     liblapack-dev \
     wget \
     xorg-dev \
+    xauth \
     python3-colcon-common-extensions \
     ros-${ROS_DISTRO}-ros-base \
     ${APT_DEPENDENCIES}
@@ -78,6 +79,9 @@ RUN adduser --shell ${USERSHELLPATH} --disabled-password --gecos "" ${USERNAME} 
     chmod 0440 /etc/sudoers.d/${USERNAME}
 RUN groupmod -o -g ${USER_GID} ${USERNAME}
 RUN usermod -u ${USER_UID} -g ${USER_GID} ${USERNAME}
+RUN mkdir -p /tmp/runtime-${USERNAME} && \
+    chown ${USER_UID}:${USER_GID} /tmp/runtime-${USERNAME} && \
+    chmod 700 /tmp/runtime-${USERNAME}
 
 ARG USER_GROUPS=""
 RUN if [ -n "${USER_GROUPS}" ]; then \
@@ -90,11 +94,12 @@ RUN if [ -n "${USER_GROUPS}" ]; then \
 # Move optix file into docker container
 ARG OPTIX_SCRIPT
 COPY ${OPTIX_SCRIPT} /tmp/optix.sh
+COPY ros_entrypoint.sh /opt/ros_entrypoint.sh
 RUN chmod +x /tmp/optix.sh && \
+        chmod +x /opt/ros_entrypoint.sh && \
         mkdir /opt/optix && \
         /tmp/optix.sh --prefix=/opt/optix --skip-license && \
         rm /tmp/optix.sh
-
 
 RUN apt-get update && apt-get install -y nano
 
@@ -122,13 +127,16 @@ ENV HOME=${USERHOME}
 ENV USERSHELLPATH=${USERSHELLPATH}
 ENV USERSHELLPROFILE=${USERSHELLPROFILE}
 ENV ROS_DISTRO=${ROS_DISTRO}
+ENV VSG_FILE_PATH=${USERHOME}/mountdir/packages/vsg/share/vsgExamples
+ENV XDG_RUNTIME_DIR=/tmp/runtime-${USERNAME}
 RUN echo "export PYTHONPATH=\"${USERHOME}/mountdir/lib/chrono-build/share/chrono/python:${USERHOME}/mountdir/chrono/build/bin:\$PYTHONPATH\"" >> ${USERSHELLPROFILE}
-RUN echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:${USERHOME}/packages/vsg/lib:${USERHOME}/packages/urdf/lib" >> ${USERSHELLPROFILE}
+RUN echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:${USERHOME}/mountdir/packages/vsg/lib:${USERHOME}/mountdir/packages/urdf/lib" >> ${USERSHELLPROFILE}
+RUN echo "export VSG_FILE_PATH=\"${VSG_FILE_PATH}\"" >> ${USERSHELLPROFILE}
+RUN echo "export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR}\"" >> ${USERSHELLPROFILE}
 
 CMD ${USERSHELLPATH}
 
 # Source ROS setup.bash and build chrono_ros_interfaces during the container build process
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.sh" >> ${USERSHELLPROFILE}
 RUN echo "source ${ROS_WORKSPACE_DIR}/install/setup.sh" >> ${USERSHELLPROFILE}
-
-
+ENTRYPOINT ["/opt/ros_entrypoint.sh"]

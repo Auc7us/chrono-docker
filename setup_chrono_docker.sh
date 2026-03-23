@@ -17,7 +17,11 @@ pip install numpy pandas
 
 echo "Changing directory to chrono-docker..."
 cd chrono-docker/mountdir
-git clone -b main https://github.com/projectchrono/chrono.git
+if [ -d chrono/.git ]; then
+    echo "Chrono repo already exists in mountdir; skipping clone"
+else
+    git clone -b main https://github.com/projectchrono/chrono.git
+fi
 
 cd ..
 

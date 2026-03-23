@@ -6,20 +6,22 @@ services:
   chrono:
     build:
       args:
-        APT_DEPENDENCIES: python3.10 python3.10-dev python3-pip libirrlicht-dev libnvidia-gl-515
-          libeigen3-dev git cmake cmake-curses-gui libglu1-mesa-dev mesa-common-dev
-          swig libglew-dev freeglut3-dev libglfw3 libglfw3-dev x11proto-gl-dev libxxf86vm-dev
-          openmpi-common libopenmpi-dev ninja-build python3-numpy ros-${ROS_DISTRO}-ros-base
-          python3-colcon-common-extensions libglew-dev
-        CUDA_VERSION: 12.2.0
-        OPTIX_SCRIPT: NVIDIA-OptiX-SDK-7.7.0-linux64-x86_64.sh
+        APT_DEPENDENCIES: python3.10 python3.10-dev python3-pip libirrlicht-dev libeigen3-dev
+          git cmake cmake-curses-gui libglu1-mesa-dev mesa-common-dev swig libglew-dev
+          freeglut3-dev libglfw3 libglfw3-dev x11proto-gl-dev libxxf86vm-dev openmpi-common
+          libopenmpi-dev ninja-build python3-numpy ros-${ROS_DISTRO}-ros-base python3-colcon-common-extensions
+          libfastcdr-dev libfastrtps-dev libglew-dev
+        CUDA_VERSION: 13.0.0
+        OPTIX_SCRIPT: NVIDIA-OptiX-SDK-9.0.0-linux64-x86_64.sh
         PROJECT: ${COMPOSE_PROJECT_NAME}
         ROS_DISTRO: ${ROS_DISTRO}
         UBUNTU_VERSION: '22.04'
+        USER_GID: '1001'
+        USER_UID: '1001'
       context: ./docker/chrono
       dockerfile: ./chrono.dockerfile
       network: host
-    container_name: ${COMPOSE_PROJECT_NAME}-orb
+    container_name: ${COMPOSE_PROJECT_NAME}-test
     deploy:
       resources:
         reservations:
@@ -29,12 +31,17 @@ services:
             count: 1
             driver: nvidia
     environment:
-      DISPLAY: ${DISPLAY}
+      DISPLAY: ${DISPLAY:-}
       NVIDIA_DRIVER_CAPABILITIES: all
       NVIDIA_VISIBLE_DEVICES: all
-    hostname: ${COMPOSE_PROJECT_NAME}-orb
-    image: atk/${COMPOSE_PROJECT_NAME}:orb
+      XAUTHORITY: /home/${ATK_CONTAINER_USERNAME}/.Xauthority
+      XDG_RUNTIME_DIR: /tmp/runtime-${ATK_CONTAINER_USERNAME}
+    gpus: all
+    hostname: ${COMPOSE_PROJECT_NAME}-test
+    image: atk/${COMPOSE_PROJECT_NAME}:test
     ipc: host
+    network_mode: host
+    runtime: nvidia
     shm_size: 6g
     tty: true
     volumes:
@@ -44,6 +51,7 @@ services:
       target: /home/${ATK_CONTAINER_USERNAME}/${MOUNT_DIR}
       type: bind
     - /tmp/.X11-unix:/tmp/.X11-unix
+    - ${HOME}/.Xauthority:/tmp/host.XAuthority:ro
     working_dir: /home/${ATK_CONTAINER_USERNAME}/${MOUNT_DIR}/chrono
   vnc:
     build:
@@ -64,13 +72,17 @@ services:
             count: 1
             driver: nvidia
     environment:
-      DISPLAY: ${DISPLAY}
+      DISPLAY: ${DISPLAY:-}
       NVIDIA_DRIVER_CAPABILITIES: all
       NVIDIA_VISIBLE_DEVICES: all
       RUN_FLUXBOX: 'yes'
       RUN_XTERM: 'no'
+      XAUTHORITY: /home/${ATK_CONTAINER_USERNAME}/.Xauthority
+      XDG_RUNTIME_DIR: /tmp/runtime-${ATK_CONTAINER_USERNAME}
+    gpus: all
     hostname: ${COMPOSE_PROJECT_NAME}-vnc
     image: atk/${COMPOSE_PROJECT_NAME}:vnc
+    network_mode: host
     ports:
     - host_ip: 127.0.0.1
       mode: ingress
@@ -82,8 +94,10 @@ services:
       protocol: tcp
       published: 5900-5999
       target: 5900
+    runtime: nvidia
     volumes:
     - /tmp/.X11-unix:/tmp/.X11-unix
+    - ${HOME}/.Xauthority:/tmp/host.XAuthority:ro
 x-optionals:
   gpus:
     deploy:
@@ -97,10 +111,16 @@ x-optionals:
     environment:
       NVIDIA_DRIVER_CAPABILITIES: all
       NVIDIA_VISIBLE_DEVICES: all
+    gpus: all
+    runtime: nvidia
   network_mode_host:
     network_mode: host
   x11:
     environment:
-      DISPLAY: ${DISPLAY}
+      DISPLAY: ${DISPLAY:-}
+      XAUTHORITY: /home/${ATK_CONTAINER_USERNAME}/.Xauthority
+      XDG_RUNTIME_DIR: /tmp/runtime-${ATK_CONTAINER_USERNAME}
+    network_mode: host
     volumes:
     - /tmp/.X11-unix:/tmp/.X11-unix
+    - ${HOME}/.Xauthority:/tmp/host.XAuthority:ro
