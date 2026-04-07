@@ -1,4 +1,8 @@
 .chrono-env/
 chrono-docker/mountdir/chrono/
+chrono-docker/mountdir/Miniconda3-latest-Linux-x86_64.sh
 chrono-docker/mountdir/lib/chrono-build/
 chrono-docker/mountdir/packages/
+
+*.codex
+.setup-tmp/

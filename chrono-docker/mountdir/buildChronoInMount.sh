@@ -190,4 +190,13 @@ if ! grep -q "VSG_FILE_PATH" "${HOME}/.bashrc" 2>/dev/null; then
     echo "export VSG_FILE_PATH=\"${VSG_FILE_PATH}\"" >> "${HOME}/.bashrc"
 fi
 
+export CHRONO_PYTHONPATH="${INSTALL_PREFIX}/share/chrono/python"
+export CHRONO_LD_LIBRARY_PATH="${INSTALL_PREFIX}/lib"
+if ! grep -q "${CHRONO_PYTHONPATH}" "${HOME}/.bashrc" 2>/dev/null; then
+    echo "export PYTHONPATH=\"${CHRONO_PYTHONPATH}:\$PYTHONPATH\"" >> "${HOME}/.bashrc"
+fi
+if ! grep -q "${CHRONO_LD_LIBRARY_PATH}" "${HOME}/.bashrc" 2>/dev/null; then
+    echo "export LD_LIBRARY_PATH=\"${CHRONO_LD_LIBRARY_PATH}:\$LD_LIBRARY_PATH\"" >> "${HOME}/.bashrc"
+fi
+
 echo "Chrono build in persistent mount directory completed successfully!"
