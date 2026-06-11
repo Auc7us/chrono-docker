@@ -1,4 +1,14 @@
 .chrono-env/
-chrono-docker/mountdir/chrono/
-chrono-docker/mountdir/lib/chrono-build/
-chrono-docker/mountdir/packages/
+.agents/
+.codex/
+.claude/
+.cursor/
+.continue/
+.aider*
+chrono-docker/mountdir/*
+!chrono-docker/mountdir/buildChronoInMount.sh
+!chrono-docker/mountdir/lib/
+!chrono-docker/mountdir/lib/.gitkeep
+!chrono-docker/mountdir/lib/chrono-build/
+chrono-docker/mountdir/lib/chrono-build/*
+!chrono-docker/mountdir/lib/chrono-build/readme.md
