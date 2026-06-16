@@ -319,10 +319,24 @@ ninja ${NINJA_FLAGS} && ninja ${NINJA_FLAGS} install || {
     exit 1
 }
 
-# Export VSG_FILE_PATH for convenience
-export VSG_FILE_PATH="${VSG_FILE_PATH}"
-if ! grep -q "VSG_FILE_PATH" "${HOME}/.bashrc" 2>/dev/null; then
-    echo "export VSG_FILE_PATH=\"${VSG_FILE_PATH}\"" >> "${HOME}/.bashrc"
+# Export runtime paths for Python demos and installed Chrono libraries.
+CHRONO_ENV_FILE="${HOME}/mountdir/chrono_env.sh"
+mkdir -p "$(dirname "${CHRONO_ENV_FILE}")" "${HOME}/.local/bin"
+
+if ! command -v python >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+    ln -sf "$(command -v python3)" "${HOME}/.local/bin/python"
 fi
 
+cat > "${CHRONO_ENV_FILE}" <<EOF
+export PATH="${HOME}/.local/bin\${PATH:+:\${PATH}}"
+export PYTHONPATH="${INSTALL_PREFIX}/share/chrono/python:${HOME}/mountdir/chrono/build/bin\${PYTHONPATH:+:\${PYTHONPATH}}"
+export LD_LIBRARY_PATH="${INSTALL_PREFIX}/lib:${VSG_PREFIX}/lib:${URDF_PREFIX}/lib\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}"
+export VSG_FILE_PATH="${VSG_FILE_PATH}"
+EOF
+
+if ! grep -Fq "source ${CHRONO_ENV_FILE}" "${HOME}/.bashrc" 2>/dev/null; then
+    echo "[ -f \"${CHRONO_ENV_FILE}\" ] && source \"${CHRONO_ENV_FILE}\"" >> "${HOME}/.bashrc"
+fi
+
+echo "Chrono runtime environment written to ${CHRONO_ENV_FILE}"
 echo "Chrono build in persistent mount directory completed successfully!"

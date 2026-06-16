@@ -32,6 +32,7 @@ RUN apt update && \
 ARG APT_DEPENDENCIES=""
 RUN apt-get update && apt-get install --no-install-recommends -y \
     python3-pip \
+    python-is-python3 \
     sudo \
     git \
     cmake \
