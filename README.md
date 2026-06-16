@@ -8,11 +8,6 @@
 ```
 git clone https://github.com/Auc7us/chrono-docker/
 ```
-##### Install [Git LFS](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage) and
- 
-```
-git lfs pull
-```
 
 #### 2. Install [Docker Engine](https://docs.docker.com/engine/install/ubuntu/)
  
