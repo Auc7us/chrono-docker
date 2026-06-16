@@ -1,6 +1,9 @@
 x-optionals:
   gpus:
-    gpus: all
+    gpus:
+      - driver: nvidia
+        count: all
+        capabilities: [gpu]
     environment:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: all

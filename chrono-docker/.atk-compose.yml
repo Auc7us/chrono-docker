@@ -28,7 +28,11 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
       XAUTHORITY: /home/${ATK_CONTAINER_USERNAME}/.Xauthority
       XDG_RUNTIME_DIR: /tmp/runtime-${ATK_CONTAINER_USERNAME}
-    gpus: all
+    gpus:
+    - capabilities:
+      - gpu
+      count: all
+      driver: nvidia
     hostname: ${COMPOSE_PROJECT_NAME}-orb
     image: atk/${COMPOSE_PROJECT_NAME}:orb
     ipc: host
@@ -62,7 +66,11 @@ services:
       RUN_XTERM: 'no'
       XAUTHORITY: /home/${ATK_CONTAINER_USERNAME}/.Xauthority
       XDG_RUNTIME_DIR: /tmp/runtime-${ATK_CONTAINER_USERNAME}
-    gpus: all
+    gpus:
+    - capabilities:
+      - gpu
+      count: all
+      driver: nvidia
     hostname: ${COMPOSE_PROJECT_NAME}-vnc
     image: atk/${COMPOSE_PROJECT_NAME}:vnc
     network_mode: host
@@ -85,7 +93,11 @@ x-optionals:
     environment:
       NVIDIA_DRIVER_CAPABILITIES: all
       NVIDIA_VISIBLE_DEVICES: all
-    gpus: all
+    gpus:
+    - capabilities:
+      - gpu
+      count: all
+      driver: nvidia
   network_mode_host:
     network_mode: host
   x11:
