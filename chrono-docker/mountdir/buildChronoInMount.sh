@@ -6,6 +6,8 @@ PACKAGE_DIR=${PACKAGE_DIR:-"$HOME/mountdir/packages"}
 INSTALL_PREFIX=${INSTALL_PREFIX:-"$HOME/mountdir/lib/chrono-build"}
 VSG_FILE_PATH="${PACKAGE_DIR}/vsg/share/vsgExamples"
 CHRONO_CUDA_ARCHITECTURES=${CHRONO_CUDA_ARCHITECTURES:-89}
+CHRONO_CUDA_FLAGS=${CHRONO_CUDA_FLAGS:-"--expt-relaxed-constexpr"}
+NINJA_FLAGS=${NINJA_FLAGS:-}
 BLAZE_VERSION_TAG=${BLAZE_VERSION_TAG:-v3.8.2}
 DEFAULT_BLAZE_INCLUDE_DIR=/usr/local/include
 LOCAL_BLAZE_INCLUDE_DIR="${PACKAGE_DIR}/blaze-3.8.2"
@@ -14,6 +16,7 @@ URDF_PREFIX="${PACKAGE_DIR}/urdf"
 VSG_PREFIX="${PACKAGE_DIR}/vsg"
 OPTIX_ARCHIVE_PATH=${OPTIX_ARCHIVE_PATH:-"/opt/optix-installer/sensor-dep.zip"}
 OPTIX_INSTALL_DIR=${OPTIX_INSTALL_DIR:-"/opt/optix"}
+FMU_FORGE_DIR=${FMU_FORGE_DIR:-}
 
 die() {
     echo "Error: $*" >&2
@@ -138,8 +141,87 @@ patch_vsg_build_script() {
     fi
 }
 
+patch_multicore_thrust_header() {
+    local header_path="src/chrono/multicore_math/thrust.h"
+    local tmp_file
+
+    [ -f "${header_path}" ] || die "Chrono multicore Thrust header not found at ${header_path}."
+
+    if ! grep -q "#include <iterator>" "${header_path}"; then
+        tmp_file=$(mktemp)
+        awk '{
+            print
+            if ($0 == "#include <iostream>") {
+                print "#include <iterator>"
+            }
+        }' "${header_path}" > "${tmp_file}"
+        cat "${tmp_file}" > "${header_path}"
+        rm -f "${tmp_file}"
+    fi
+
+    if ! grep -q "#include <thrust/distance.h>" "${header_path}"; then
+        tmp_file=$(mktemp)
+        awk '{
+            print
+            if ($0 == "#include <thrust/copy.h>") {
+                print "#include <thrust/distance.h>"
+                print "#include <thrust/advance.h>"
+            }
+        }' "${header_path}" > "${tmp_file}"
+        cat "${tmp_file}" > "${header_path}"
+        rm -f "${tmp_file}"
+    fi
+
+    if grep -q "thrust::iterator_difference" "${header_path}"; then
+        sed -i \
+            -e 's/typename thrust::iterator_difference<InputIterator1>::type/typename std::iterator_traits<InputIterator1>::difference_type/g' \
+            "${header_path}"
+    fi
+}
+
 cd "$(dirname "$0")"
 cd chrono
+
+FMU_FORGE_DIR=${FMU_FORGE_DIR:-"$(pwd)/src/chrono_thirdparty/fmu-forge"}
+
+ensure_fmu_forge_available() {
+    local default_fmu_forge_dir
+
+    default_fmu_forge_dir="$(pwd)/src/chrono_thirdparty/fmu-forge"
+
+    if [ -f "${FMU_FORGE_DIR}/fmi2/FmuToolsImport.h" ]; then
+        echo "Using fmu-forge from ${FMU_FORGE_DIR}"
+        return
+    fi
+
+    if [ "${FMU_FORGE_DIR}" != "${default_fmu_forge_dir}" ]; then
+        die "fmu-forge headers were not found in FMU_FORGE_DIR=${FMU_FORGE_DIR}."
+    fi
+
+    command -v git >/dev/null 2>&1 || die "git is required to initialize the fmu-forge submodule."
+
+    echo "fmu-forge headers not found. Initializing Chrono fmu-forge submodule..."
+    git submodule update --init --recursive src/chrono_thirdparty/fmu-forge || die "Unable to initialize fmu-forge submodule."
+
+    [ -f "${FMU_FORGE_DIR}/fmi2/FmuToolsImport.h" ] || die "fmu-forge submodule initialized, but fmi2/FmuToolsImport.h is still missing."
+}
+
+ensure_flatbuffers_available() {
+    local flatbuffers_dir="src/chrono_thirdparty/flatbuffers"
+    local flatbuffers_header="${flatbuffers_dir}/include/flatbuffers/flatbuffers.h"
+
+    if [ -f "${flatbuffers_header}" ]; then
+        echo "Using FlatBuffers from $(pwd)/${flatbuffers_dir}"
+        return
+    fi
+
+    command -v git >/dev/null 2>&1 || die "git is required to initialize the flatbuffers submodule."
+
+    echo "FlatBuffers headers not found. Initializing Chrono flatbuffers submodule..."
+    git submodule update --init --recursive "${flatbuffers_dir}" || die "Unable to initialize flatbuffers submodule."
+
+    [ -f "${flatbuffers_header}" ] || die "flatbuffers submodule initialized, but include/flatbuffers/flatbuffers.h is still missing."
+}
 
 mkdir -p "${PACKAGE_DIR}"
 
@@ -162,6 +244,15 @@ if [ ! -f "${VSG_PREFIX}/lib/cmake/vsg/vsgConfig.cmake" ] || \
     rm -rf "${VSG_PREFIX}"
     bash contrib/build-scripts/linux/buildVSG.sh "${VSG_PREFIX}"
 fi
+
+echo "Ensuring Chrono CUDA 13.2 compatibility patches are applied..."
+patch_multicore_thrust_header
+
+echo "Ensuring FMI dependencies are present..."
+ensure_fmu_forge_available
+
+echo "Ensuring SynChrono dependencies are present..."
+ensure_flatbuffers_available
 
 ROS_SETUP="/opt/ros/${ROS_DISTRO}/setup.sh"
 if [ -f "${ROS_SETUP}" ]; then
@@ -203,6 +294,7 @@ cmake ../ -G Ninja \
         -DCH_ENABLE_MODULE_FMI=ON \
         -DCH_ENABLE_MODULE_PERIDYNAMICS=ON \
         -DCHRONO_CUDA_ARCHITECTURES=${CHRONO_CUDA_ARCHITECTURES} \
+        -DCMAKE_CUDA_FLAGS="${CHRONO_CUDA_FLAGS}" \
         -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
         -Dblaze_INCLUDE_DIR=${BLAZE_INCLUDE_DIR} \
         -DEigen3_DIR=/usr/lib/cmake/eigen3 \
@@ -216,12 +308,16 @@ cmake ../ -G Ninja \
         -Dconsole_bridge_DIR=${URDF_PREFIX}/lib/console_bridge/cmake \
         -Dtinyxml2_DIR=${URDF_PREFIX}/CMake \
         -DTinyXML2_DIR=${URDF_PREFIX}/CMake \
+        -DFMU_FORGE_DIR="${FMU_FORGE_DIR}" \
         -DCMAKE_PREFIX_PATH="${URDF_PREFIX};${URDF_PREFIX}/CMake;${URDF_PREFIX}/lib/cmake/tinyxml2;${VSG_PREFIX}" \
         -DCMAKE_LIBRARY_PATH=${CUDA_STUBS} \
         -DCH_USE_SENSOR_NVRTC=OFF \
         -DNUMPY_INCLUDE_DIR=${NUMPY_INC} \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}"
-ninja && ninja install || { echo "Build failed!"; exit 1; }
+ninja ${NINJA_FLAGS} && ninja ${NINJA_FLAGS} install || {
+    echo "Build failed! Re-run with NINJA_FLAGS='-j1 -v' ./buildChronoInMount.sh to show the exact failing command." >&2
+    exit 1
+}
 
 # Export VSG_FILE_PATH for convenience
 export VSG_FILE_PATH="${VSG_FILE_PATH}"
