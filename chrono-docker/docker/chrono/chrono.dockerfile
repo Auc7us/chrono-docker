@@ -128,7 +128,7 @@ ENV ROS_DISTRO=${ROS_DISTRO}
 ENV VSG_FILE_PATH=${USERHOME}/mountdir/packages/vsg/share/vsgExamples
 ENV XDG_RUNTIME_DIR=/tmp/runtime-${USERNAME}
 RUN echo "export PYTHONPATH=\"${USERHOME}/mountdir/lib/chrono-build/share/chrono/python:${USERHOME}/mountdir/chrono/build/bin:\$PYTHONPATH\"" >> ${USERSHELLPROFILE}
-RUN echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:${USERHOME}/mountdir/packages/vsg/lib:${USERHOME}/mountdir/packages/urdf/lib" >> ${USERSHELLPROFILE}
+RUN echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:${USERHOME}/mountdir/lib/chrono-build/lib:${USERHOME}/mountdir/packages/vsg/lib:${USERHOME}/mountdir/packages/urdf/lib" >> ${USERSHELLPROFILE}
 RUN echo "export VSG_FILE_PATH=\"${VSG_FILE_PATH}\"" >> ${USERSHELLPROFILE}
 RUN echo "export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR}\"" >> ${USERSHELLPROFILE}
 

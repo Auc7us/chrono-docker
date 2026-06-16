@@ -1,5 +1,7 @@
 x-optionals:
   gpus:
+    gpus: all
+    runtime: nvidia
     deploy:
       resources:
         reservations:
@@ -13,6 +15,7 @@ x-optionals:
   network_mode_host:
     network_mode: 'host'
   x11:
+    network_mode: 'host'
     volumes:
       - '/tmp/.X11-unix:/tmp/.X11-unix'
       - '${HOME}/.Xauthority:/tmp/host.XAuthority:ro'

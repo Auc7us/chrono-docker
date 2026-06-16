@@ -36,9 +36,12 @@ services:
       NVIDIA_VISIBLE_DEVICES: all
       XAUTHORITY: /home/${ATK_CONTAINER_USERNAME}/.Xauthority
       XDG_RUNTIME_DIR: /tmp/runtime-${ATK_CONTAINER_USERNAME}
+    gpus: all
     hostname: ${COMPOSE_PROJECT_NAME}-orb
     image: atk/${COMPOSE_PROJECT_NAME}:orb
     ipc: host
+    network_mode: host
+    runtime: nvidia
     shm_size: 6g
     tty: true
     volumes:
@@ -76,8 +79,10 @@ services:
       RUN_XTERM: 'no'
       XAUTHORITY: /home/${ATK_CONTAINER_USERNAME}/.Xauthority
       XDG_RUNTIME_DIR: /tmp/runtime-${ATK_CONTAINER_USERNAME}
+    gpus: all
     hostname: ${COMPOSE_PROJECT_NAME}-vnc
     image: atk/${COMPOSE_PROJECT_NAME}:vnc
+    network_mode: host
     ports:
     - host_ip: 127.0.0.1
       mode: ingress
@@ -89,6 +94,7 @@ services:
       protocol: tcp
       published: 5900-5999
       target: 5900
+    runtime: nvidia
     volumes:
     - /tmp/.X11-unix:/tmp/.X11-unix
     - ${HOME}/.Xauthority:/tmp/host.XAuthority:ro
@@ -105,6 +111,8 @@ x-optionals:
     environment:
       NVIDIA_DRIVER_CAPABILITIES: all
       NVIDIA_VISIBLE_DEVICES: all
+    gpus: all
+    runtime: nvidia
   network_mode_host:
     network_mode: host
   x11:
@@ -112,6 +120,7 @@ x-optionals:
       DISPLAY: ${DISPLAY:-}
       XAUTHORITY: /home/${ATK_CONTAINER_USERNAME}/.Xauthority
       XDG_RUNTIME_DIR: /tmp/runtime-${ATK_CONTAINER_USERNAME}
+    network_mode: host
     volumes:
     - /tmp/.X11-unix:/tmp/.X11-unix
     - ${HOME}/.Xauthority:/tmp/host.XAuthority:ro

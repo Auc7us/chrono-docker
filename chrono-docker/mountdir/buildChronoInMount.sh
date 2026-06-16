@@ -108,6 +108,36 @@ ensure_optix_installed() {
     echo "OptiX installed to ${OPTIX_INSTALL_DIR}"
 }
 
+patch_vsg_build_script() {
+    local script_path="contrib/build-scripts/linux/buildVSG.sh"
+    local tmp_file
+
+    [ -f "${script_path}" ] || die "VSG build script not found at ${script_path}."
+
+    if ! grep -q "set -euo pipefail" "${script_path}"; then
+        tmp_file=$(mktemp)
+        awk 'NR == 1 { print; print "set -euo pipefail"; next } { print }' "${script_path}" > "${tmp_file}"
+        cat "${tmp_file}" > "${script_path}"
+        rm -f "${tmp_file}"
+    fi
+
+    if ! grep -q "GLSLANG_TESTS:BOOL=OFF" "${script_path}"; then
+        tmp_file=$(mktemp)
+        awk '
+            /-DBUILD_SHARED_LIBS:BOOL=\$\{BUILDSHARED\} \\/ {
+                print
+                print "      -DBUILD_TESTING:BOOL=OFF \\"
+                print "      -DGLSLANG_TESTS:BOOL=OFF \\"
+                print "      -DSPIRV_SKIP_TESTS:BOOL=ON \\"
+                next
+            }
+            { print }
+        ' "${script_path}" > "${tmp_file}"
+        cat "${tmp_file}" > "${script_path}"
+        rm -f "${tmp_file}"
+    fi
+}
+
 cd "$(dirname "$0")"
 cd chrono
 
@@ -125,6 +155,7 @@ if [ ! -d "${PACKAGE_DIR}/urdf" ]; then
 fi
 
 echo "Ensuring VSG dependencies are built..."
+patch_vsg_build_script
 if [ ! -f "${VSG_PREFIX}/lib/cmake/vsg/vsgConfig.cmake" ] || \
    [ ! -f "${VSG_PREFIX}/lib/cmake/vsgXchange/vsgXchangeConfig.cmake" ] || \
    [ ! -f "${VSG_PREFIX}/lib/cmake/vsgImGui/vsgImGuiConfig.cmake" ]; then

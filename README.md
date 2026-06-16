@@ -40,8 +40,7 @@ sudo apt install python3-venv -y
 
 -  __Inside the container, build Chrono in the persistent mount directory on host using :__
     ```
-    cd ..
-    chmod +x buildChronoInMount.sh
+    cd ~/mountdir
     ./buildChronoInMount.sh
     ```
 
