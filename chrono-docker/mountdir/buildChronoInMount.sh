@@ -179,6 +179,29 @@ patch_multicore_thrust_header() {
     fi
 }
 
+patch_python_fea_swig_flags() {
+    local cmake_path="src/chrono_swig/chrono_python/CMakeLists.txt"
+    local tmp_file
+
+    [ -f "${cmake_path}" ] || die "Chrono Python SWIG CMake file not found at ${cmake_path}."
+
+    if ! grep -q -- "-DCHRONO_FEA" "${cmake_path}"; then
+        tmp_file=$(mktemp)
+        awk '
+            /if\(CH_ENABLE_MODULE_VSG\)/ && ! inserted {
+                print "if(CH_ENABLE_MODULE_FEA)"
+                print "  set(CMAKE_SWIG_FLAGS \"${CMAKE_SWIG_FLAGS};-DCHRONO_FEA\")"
+                print "endif()"
+                print ""
+                inserted = 1
+            }
+            { print }
+        ' "${cmake_path}" > "${tmp_file}"
+        cat "${tmp_file}" > "${cmake_path}"
+        rm -f "${tmp_file}"
+    fi
+}
+
 cd "$(dirname "$0")"
 cd chrono
 
@@ -247,6 +270,7 @@ fi
 
 echo "Ensuring Chrono CUDA 13.2 compatibility patches are applied..."
 patch_multicore_thrust_header
+patch_python_fea_swig_flags
 
 echo "Ensuring FMI dependencies are present..."
 ensure_fmu_forge_available
