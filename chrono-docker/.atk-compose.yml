@@ -41,7 +41,6 @@ services:
     image: atk/${COMPOSE_PROJECT_NAME}:orb
     ipc: host
     network_mode: host
-    runtime: nvidia
     shm_size: 6g
     tty: true
     volumes:
@@ -94,7 +93,6 @@ services:
       protocol: tcp
       published: 5900-5999
       target: 5900
-    runtime: nvidia
     volumes:
     - /tmp/.X11-unix:/tmp/.X11-unix
     - ${HOME}/.Xauthority:/tmp/host.XAuthority:ro
@@ -112,7 +110,6 @@ x-optionals:
       NVIDIA_DRIVER_CAPABILITIES: all
       NVIDIA_VISIBLE_DEVICES: all
     gpus: all
-    runtime: nvidia
   network_mode_host:
     network_mode: host
   x11:

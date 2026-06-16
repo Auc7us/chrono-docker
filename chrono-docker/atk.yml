@@ -1,7 +1,6 @@
 x-optionals:
   gpus:
     gpus: all
-    runtime: nvidia
     deploy:
       resources:
         reservations:
