@@ -22,14 +22,6 @@ services:
       dockerfile: ./chrono.dockerfile
       network: host
     container_name: ${COMPOSE_PROJECT_NAME}-orb
-    deploy:
-      resources:
-        reservations:
-          devices:
-          - capabilities:
-            - gpu
-            count: 1
-            driver: nvidia
     environment:
       DISPLAY: ${DISPLAY:-}
       NVIDIA_DRIVER_CAPABILITIES: all
@@ -62,14 +54,6 @@ services:
       dockerfile: ./vnc.dockerfile
       network: host
     container_name: ${COMPOSE_PROJECT_NAME}-vnc
-    deploy:
-      resources:
-        reservations:
-          devices:
-          - capabilities:
-            - gpu
-            count: 1
-            driver: nvidia
     environment:
       DISPLAY: ${DISPLAY:-}
       NVIDIA_DRIVER_CAPABILITIES: all
@@ -98,14 +82,6 @@ services:
     - ${HOME}/.Xauthority:/tmp/host.XAuthority:ro
 x-optionals:
   gpus:
-    deploy:
-      resources:
-        reservations:
-          devices:
-          - capabilities:
-            - gpu
-            count: 1
-            driver: nvidia
     environment:
       NVIDIA_DRIVER_CAPABILITIES: all
       NVIDIA_VISIBLE_DEVICES: all
