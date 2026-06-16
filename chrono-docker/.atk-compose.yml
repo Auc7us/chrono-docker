@@ -16,8 +16,8 @@ services:
         PROJECT: ${COMPOSE_PROJECT_NAME}
         ROS_DISTRO: ${ROS_DISTRO}
         UBUNTU_VERSION: '22.04'
-        USER_GID: '1001'
-        USER_UID: '1001'
+        USER_GID: '1000'
+        USER_UID: '1000'
       context: ./docker/chrono
       dockerfile: ./chrono.dockerfile
       network: host
