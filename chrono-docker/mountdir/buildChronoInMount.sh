@@ -15,7 +15,7 @@ BLAZE_INCLUDE_DIR=${BLAZE_INCLUDE_DIR:-${LOCAL_BLAZE_INCLUDE_DIR}}
 URDF_PREFIX="${PACKAGE_DIR}/urdf"
 VSG_PREFIX="${PACKAGE_DIR}/vsg"
 OPTIX_ARCHIVE_PATH=${OPTIX_ARCHIVE_PATH:-"/opt/optix-installer/sensor-dep.zip"}
-OPTIX_INSTALL_DIR=${OPTIX_INSTALL_DIR:-"/opt/optix"}
+OPTIX_INSTALL_DIR=${OPTIX_INSTALL_DIR:-"${PACKAGE_DIR}/optix"}
 FMU_FORGE_DIR=${FMU_FORGE_DIR:-}
 
 die() {
@@ -94,7 +94,6 @@ ensure_optix_installed() {
 
     [ -f "${OPTIX_ARCHIVE_PATH}" ] || die "OptiX archive not found at ${OPTIX_ARCHIVE_PATH}. Copy sensor-dep.zip into the image before building."
     command -v unzip >/dev/null 2>&1 || die "unzip is required to extract ${OPTIX_ARCHIVE_PATH}."
-    command -v sudo >/dev/null 2>&1 || die "sudo is required to install OptiX into ${OPTIX_INSTALL_DIR}."
 
     tmp_optix=$(mktemp -d)
     unzip -q "${OPTIX_ARCHIVE_PATH}" -d "${tmp_optix}" || die "Unable to extract ${OPTIX_ARCHIVE_PATH}."
@@ -103,8 +102,13 @@ ensure_optix_installed() {
 
     chmod +x "${installer_path}"
     echo "Installing OptiX from ${OPTIX_ARCHIVE_PATH}..."
-    sudo mkdir -p "${OPTIX_INSTALL_DIR}"
-    sudo "${installer_path}" --prefix="${OPTIX_INSTALL_DIR}" --skip-license || die "OptiX installer failed."
+    if mkdir -p "${OPTIX_INSTALL_DIR}" 2>/dev/null; then
+        "${installer_path}" --prefix="${OPTIX_INSTALL_DIR}" --skip-license || die "OptiX installer failed."
+    else
+        command -v sudo >/dev/null 2>&1 || die "sudo is required to install OptiX into ${OPTIX_INSTALL_DIR}."
+        sudo mkdir -p "${OPTIX_INSTALL_DIR}"
+        sudo "${installer_path}" --prefix="${OPTIX_INSTALL_DIR}" --skip-license || die "OptiX installer failed."
+    fi
     rm -rf "${tmp_optix}"
 
     [ -f "${OPTIX_INSTALL_DIR}/include/optix.h" ] || die "OptiX install completed, but ${OPTIX_INSTALL_DIR}/include/optix.h is still missing."
