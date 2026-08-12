@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# -----------------------------------------------------------------------------
+# Build Project Chrono with the AMD HIP/ROCm backend -- FULL module set, Sensor
+# excluded (Chrono::Sensor needs NVIDIA OptiX, which has no HIP equivalent).
+#
+# Host compiler is g++-13 (Ubuntu 22.04's default g++-11 lacks _Float16, needed
+# by ROCm 7.x rocThrust). This matches the Chrono dev's working AMD build. The
+# few host .cpp that get the HIP device thrust path AND DEM's PUBLIC
+# __HIP_PLATFORM_AMD__ must be compiled by the ROCm clang instead -- those are
+# marked LANGUAGE HIP via the patch_*_hip_language step below.
+#
+# GPU arch defaults to gfx90a (MI210); override CHRONO_HIP_ARCHITECTURES for
+# other accelerators (e.g. gfx942 for MI300X).
+# -----------------------------------------------------------------------------
+
 ROS_DISTRO=${ROS_DISTRO:-humble}
 PACKAGE_DIR=${PACKAGE_DIR:-"$HOME/mountdir/packages"}
 INSTALL_PREFIX=${INSTALL_PREFIX:-"$HOME/mountdir/lib/chrono-build"}
-VSG_FILE_PATH="${PACKAGE_DIR}/vsg/share/vsgExamples"
-CHRONO_CUDA_ARCHITECTURES=${CHRONO_CUDA_ARCHITECTURES:-89}
-CHRONO_CUDA_FLAGS=${CHRONO_CUDA_FLAGS:-"--expt-relaxed-constexpr"}
+export VSG_FILE_PATH="${PACKAGE_DIR}/vsg/share/vsgExamples"
+CHRONO_HIP_ARCHITECTURES=${CHRONO_HIP_ARCHITECTURES:-gfx90a}
 NINJA_FLAGS=${NINJA_FLAGS:-}
 BLAZE_VERSION_TAG=${BLAZE_VERSION_TAG:-v3.8.2}
 DEFAULT_BLAZE_INCLUDE_DIR=/usr/local/include
@@ -14,9 +27,11 @@ LOCAL_BLAZE_INCLUDE_DIR="${PACKAGE_DIR}/blaze-3.8.2"
 BLAZE_INCLUDE_DIR=${BLAZE_INCLUDE_DIR:-${LOCAL_BLAZE_INCLUDE_DIR}}
 URDF_PREFIX="${PACKAGE_DIR}/urdf"
 VSG_PREFIX="${PACKAGE_DIR}/vsg"
-OPTIX_ARCHIVE_PATH=${OPTIX_ARCHIVE_PATH:-"/opt/optix-installer/sensor-dep.zip"}
-OPTIX_INSTALL_DIR=${OPTIX_INSTALL_DIR:-"${PACKAGE_DIR}/optix"}
 FMU_FORGE_DIR=${FMU_FORGE_DIR:-}
+
+# Host C/C++ compiler -- g++-13 (see note above).
+HOST_CC=${HOST_CC:-gcc-13}
+HOST_CXX=${HOST_CXX:-g++-13}
 
 die() {
     echo "Error: $*" >&2
@@ -80,39 +95,6 @@ ensure_blaze_headers() {
 
     BLAZE_INCLUDE_DIR="${LOCAL_BLAZE_INCLUDE_DIR}"
     echo "Blaze headers installed to ${BLAZE_INCLUDE_DIR}"
-}
-
-
-ensure_optix_installed() {
-    local tmp_optix
-    local installer_path
-
-    if [ -f "${OPTIX_INSTALL_DIR}/include/optix.h" ]; then
-        echo "Using OptiX installation from ${OPTIX_INSTALL_DIR}"
-        return
-    fi
-
-    [ -f "${OPTIX_ARCHIVE_PATH}" ] || die "OptiX archive not found at ${OPTIX_ARCHIVE_PATH}. Copy sensor-dep.zip into the image before building."
-    command -v unzip >/dev/null 2>&1 || die "unzip is required to extract ${OPTIX_ARCHIVE_PATH}."
-
-    tmp_optix=$(mktemp -d)
-    unzip -q "${OPTIX_ARCHIVE_PATH}" -d "${tmp_optix}" || die "Unable to extract ${OPTIX_ARCHIVE_PATH}."
-    installer_path=$(find "${tmp_optix}" -maxdepth 2 -type f -name "NVIDIA-OptiX-SDK-*.sh" | head -n 1)
-    [ -n "${installer_path}" ] || die "OptiX archive did not contain an NVIDIA-OptiX-SDK installer."
-
-    chmod +x "${installer_path}"
-    echo "Installing OptiX from ${OPTIX_ARCHIVE_PATH}..."
-    if mkdir -p "${OPTIX_INSTALL_DIR}" 2>/dev/null; then
-        "${installer_path}" --prefix="${OPTIX_INSTALL_DIR}" --skip-license || die "OptiX installer failed."
-    else
-        command -v sudo >/dev/null 2>&1 || die "sudo is required to install OptiX into ${OPTIX_INSTALL_DIR}."
-        sudo mkdir -p "${OPTIX_INSTALL_DIR}"
-        sudo "${installer_path}" --prefix="${OPTIX_INSTALL_DIR}" --skip-license || die "OptiX installer failed."
-    fi
-    rm -rf "${tmp_optix}"
-
-    [ -f "${OPTIX_INSTALL_DIR}/include/optix.h" ] || die "OptiX install completed, but ${OPTIX_INSTALL_DIR}/include/optix.h is still missing."
-    echo "OptiX installed to ${OPTIX_INSTALL_DIR}"
 }
 
 patch_vsg_build_script() {
@@ -206,6 +188,48 @@ patch_python_fea_swig_flags() {
     fi
 }
 
+patch_hip_language_sources() {
+    # A few host .cpp hit the HIP device-thrust path while also receiving DEM's
+    # PUBLIC __HIP_PLATFORM_AMD__, which makes rocThrust/rocPRIM use AMD GPU
+    # builtins g++ cannot compile. Mark those files LANGUAGE HIP so CMake builds
+    # them with the ROCm clang instead. Guarded to the HIP backend.
+    local tmp_file
+    local fsi_cmake="src/chrono_fsi/sph/CMakeLists.txt"
+    local veh_cmake="src/chrono_vehicle/cosim/CMakeLists.txt"
+
+    if [ -f "${fsi_cmake}" ] && ! grep -q "ChSphVisualizationVSG.cpp PROPERTIES LANGUAGE HIP" "${fsi_cmake}"; then
+        tmp_file=$(mktemp)
+        awk '
+            /add_library\(Chrono_fsisph_vsg/ && !done {
+                print "    if(DEFINED CHRONO_GPU_BACKEND AND CHRONO_GPU_BACKEND STREQUAL \"HIP\")"
+                print "      set_source_files_properties(visualization/ChSphVisualizationVSG.cpp PROPERTIES LANGUAGE HIP)"
+                print "    endif()"
+                print ""
+                done = 1
+            }
+            { print }
+        ' "${fsi_cmake}" > "${tmp_file}"
+        cat "${tmp_file}" > "${fsi_cmake}"
+        rm -f "${tmp_file}"
+    fi
+
+    if [ -f "${veh_cmake}" ] && ! grep -q "ChVehicleCosimTerrainNodeGranularSPH.cpp PROPERTIES LANGUAGE HIP" "${veh_cmake}"; then
+        tmp_file=$(mktemp)
+        awk '
+            /add_library\(Chrono_vehicle_cosim/ && !done {
+                print "if(DEFINED CHRONO_GPU_BACKEND AND CHRONO_GPU_BACKEND STREQUAL \"HIP\")"
+                print "  set_source_files_properties(terrain/ChVehicleCosimTerrainNodeGranularSPH.cpp PROPERTIES LANGUAGE HIP)"
+                print "endif()"
+                print ""
+                done = 1
+            }
+            { print }
+        ' "${veh_cmake}" > "${tmp_file}"
+        cat "${tmp_file}" > "${veh_cmake}"
+        rm -f "${tmp_file}"
+    fi
+}
+
 cd "$(dirname "$0")"
 cd chrono
 
@@ -255,9 +279,6 @@ mkdir -p "${PACKAGE_DIR}"
 echo "Ensuring Blaze 3.8 headers are present..."
 ensure_blaze_headers
 
-echo "Ensuring OptiX is installed..."
-ensure_optix_installed
-
 echo "Ensuring URDF dependencies are built..."
 if [ ! -d "${PACKAGE_DIR}/urdf" ]; then
     bash contrib/build-scripts/linux/buildURDF.sh "${PACKAGE_DIR}/urdf"
@@ -272,9 +293,10 @@ if [ ! -f "${VSG_PREFIX}/lib/cmake/vsg/vsgConfig.cmake" ] || \
     bash contrib/build-scripts/linux/buildVSG.sh "${VSG_PREFIX}"
 fi
 
-echo "Ensuring Chrono CUDA 13.2 compatibility patches are applied..."
+echo "Ensuring Chrono multicore/Thrust and Python SWIG patches are applied..."
 patch_multicore_thrust_header
 patch_python_fea_swig_flags
+patch_hip_language_sources
 
 echo "Ensuring FMI dependencies are present..."
 ensure_fmu_forge_available
@@ -290,8 +312,21 @@ if [ -f "${ROS_SETUP}" ]; then
     set -u
 fi
 
-CUDA_STUBS=$(find /usr/local/cuda/ -type d -name stubs | head -n 1)
-CUDA_STUBS=${CUDA_STUBS:-/usr/local/cuda/lib64/stubs}
+# --- ROCm / HIP toolchain + host compiler ------------------------------------
+export ROCM_PATH=${ROCM_PATH:-/opt/rocm}
+export PATH="${ROCM_PATH}/bin:${PATH}"
+command -v hipcc       >/dev/null 2>&1 || die "hipcc not found; ensure the ROCm image provides it."
+command -v "${HOST_CXX}" >/dev/null 2>&1 || die "${HOST_CXX} not found; the image must install g++-13."
+
+# CMake 3.22 rejects the hipcc wrapper as CMAKE_HIP_COMPILER, so point it at the
+# ROCm clang++ directly (path differs between ROCm 6.x and 7.x layouts). This
+# clang is also used to compile the LANGUAGE-HIP-marked host files below.
+HIP_CLANG=""
+for c in "${ROCM_PATH}/lib/llvm/bin/clang++" "${ROCM_PATH}/llvm/bin/clang++"; do
+    [ -x "$c" ] && HIP_CLANG="$c" && break
+done
+[ -n "${HIP_CLANG}" ] || die "Could not find the ROCm clang++ under ${ROCM_PATH}."
+
 NUMPY_INC=$(python3 - <<'PY'
 import numpy
 print(numpy.get_include())
@@ -299,9 +334,11 @@ PY
 )
 
 mkdir -p build && cd build
-echo "Running cmake..."
+echo "Running cmake (HIP backend, arch=${CHRONO_HIP_ARCHITECTURES}, host CXX=${HOST_CXX})..."
 cmake ../ -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_C_COMPILER="${HOST_CC}" \
+        -DCMAKE_CXX_COMPILER="${HOST_CXX}" \
         -DBUILD_DEMOS=ON \
         -DBUILD_BENCHMARKING=OFF \
         -DBUILD_TESTING=OFF \
@@ -309,7 +346,7 @@ cmake ../ -G Ninja \
         -DCH_ENABLE_MODULE_VEHICLE=ON \
         -DCH_ENABLE_MODULE_IRRLICHT=ON \
         -DCH_ENABLE_MODULE_PYTHON=ON \
-        -DCH_ENABLE_MODULE_SENSOR=ON \
+        -DCH_ENABLE_MODULE_SENSOR=OFF \
         -DCH_ENABLE_MODULE_ROS=ON \
         -DCH_ENABLE_MODULE_MULTICORE=ON \
         -DCH_ENABLE_MODULE_VSG=ON \
@@ -321,13 +358,13 @@ cmake ../ -G Ninja \
         -DCH_ENABLE_MODULE_SYNCHRONO=ON \
         -DCH_ENABLE_MODULE_FMI=ON \
         -DCH_ENABLE_MODULE_PERIDYNAMICS=ON \
-        -DCHRONO_CUDA_ARCHITECTURES=${CHRONO_CUDA_ARCHITECTURES} \
-        -DCMAKE_CUDA_FLAGS="${CHRONO_CUDA_FLAGS}" \
-        -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
+        -DCHRONO_GPU_BACKEND=HIP \
+        -DCMAKE_HIP_COMPILER="${HIP_CLANG}" \
+        -DCMAKE_HIP_ARCHITECTURES="${CHRONO_HIP_ARCHITECTURES}" \
+        -DCHRONO_HIP_ARCHITECTURES="${CHRONO_HIP_ARCHITECTURES}" \
         -Dblaze_INCLUDE_DIR=${BLAZE_INCLUDE_DIR} \
         -DEigen3_DIR=/usr/lib/cmake/eigen3 \
-        -DOptiX_INCLUDE_DIR=${OPTIX_INSTALL_DIR}/include \
-        -DOptiX_INSTALL_DIR=${OPTIX_INSTALL_DIR} \
+        -DEIGEN3_INCLUDE_DIR=/usr/include/eigen3 \
         -Dvsg_DIR=${VSG_PREFIX}/lib/cmake/vsg \
         -DvsgImGui_DIR=${VSG_PREFIX}/lib/cmake/vsgImGui \
         -DvsgXchange_DIR=${VSG_PREFIX}/lib/cmake/vsgXchange \
@@ -338,8 +375,6 @@ cmake ../ -G Ninja \
         -DTinyXML2_DIR=${URDF_PREFIX}/CMake \
         -DFMU_FORGE_DIR="${FMU_FORGE_DIR}" \
         -DCMAKE_PREFIX_PATH="${URDF_PREFIX};${URDF_PREFIX}/CMake;${URDF_PREFIX}/lib/cmake/tinyxml2;${VSG_PREFIX}" \
-        -DCMAKE_LIBRARY_PATH=${CUDA_STUBS} \
-        -DCH_USE_SENSOR_NVRTC=OFF \
         -DNUMPY_INCLUDE_DIR=${NUMPY_INC} \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}"
 ninja ${NINJA_FLAGS} && ninja ${NINJA_FLAGS} install || {
@@ -347,7 +382,7 @@ ninja ${NINJA_FLAGS} && ninja ${NINJA_FLAGS} install || {
     exit 1
 }
 
-# Export runtime paths for Python demos and installed Chrono libraries.
+# --- Runtime environment -----------------------------------------------------
 CHRONO_ENV_FILE="${HOME}/mountdir/chrono_env.sh"
 mkdir -p "$(dirname "${CHRONO_ENV_FILE}")" "${HOME}/.local/bin"
 
@@ -357,8 +392,8 @@ fi
 
 cat > "${CHRONO_ENV_FILE}" <<EOF
 export PATH="${HOME}/.local/bin\${PATH:+:\${PATH}}"
-export PYTHONPATH="${INSTALL_PREFIX}/share/chrono/python:${HOME}/mountdir/chrono/build/bin\${PYTHONPATH:+:\${PYTHONPATH}}"
-export LD_LIBRARY_PATH="${INSTALL_PREFIX}/lib:${VSG_PREFIX}/lib:${URDF_PREFIX}/lib\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}"
+export PYTHONPATH="${INSTALL_PREFIX}/share/chrono/python\${PYTHONPATH:+:\${PYTHONPATH}}"
+export LD_LIBRARY_PATH="${INSTALL_PREFIX}/lib:${VSG_PREFIX}/lib:${URDF_PREFIX}/lib:${ROCM_PATH}/lib\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}"
 export VSG_FILE_PATH="${VSG_FILE_PATH}"
 EOF
 
@@ -366,5 +401,6 @@ if ! grep -Fq "source ${CHRONO_ENV_FILE}" "${HOME}/.bashrc" 2>/dev/null; then
     echo "[ -f \"${CHRONO_ENV_FILE}\" ] && source \"${CHRONO_ENV_FILE}\"" >> "${HOME}/.bashrc"
 fi
 
-echo "Chrono runtime environment written to ${CHRONO_ENV_FILE}"
-echo "Chrono build in persistent mount directory completed successfully!"
+echo "Chrono (HIP/${CHRONO_HIP_ARCHITECTURES}, full module set minus Sensor) installed under ${INSTALL_PREFIX}"
+echo "Runtime env file: ${CHRONO_ENV_FILE}"
+echo "Build complete!"
