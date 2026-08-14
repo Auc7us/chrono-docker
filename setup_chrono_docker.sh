@@ -5,6 +5,8 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
+cd chrono-docker/
+
 echo "Setting up Python3 pip environment for installation"
 python3 -m venv .chrono-env
 source .chrono-env/bin/activate
@@ -16,7 +18,7 @@ echo "Installing additional python dependencies"
 pip install numpy pandas
 
 echo "Changing directory to chrono-docker..."
-cd chrono-docker/mountdir
+cd mountdir/
 if [ -d chrono/.git ]; then
     echo "Chrono repo already exists in mountdir; skipping clone"
 else
