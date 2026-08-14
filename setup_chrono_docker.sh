@@ -22,7 +22,7 @@ cd mountdir/
 if [ -d chrono/.git ]; then
     echo "Chrono repo already exists in mountdir; skipping clone"
 else
-    git clone -b main https://github.com/projectchrono/chrono.git
+    git clone -b main https://github.com/Auc7us/chrono.git
 fi
 
 cd ..
