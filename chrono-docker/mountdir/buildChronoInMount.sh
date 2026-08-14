@@ -23,6 +23,41 @@ die() {
     exit 1
 }
 
+# Assert that CMake resolved what we asked for. Run from the build directory, after
+# cmake and before ninja, so a misconfiguration costs seconds instead of a full build.
+#
+# Two different signals are needed, because the two failure modes leave different traces:
+#
+#  - Modules that cannot satisfy their dependencies write OFF back to the cache with
+#    FORCE (see src/chrono_synchrono/CMakeLists.txt), so re-reading the cache after
+#    configure catches them. They only print a message, which scrolls past in a long
+#    configure and leaves a build that succeeds while missing the module.
+#
+#  - The SCM GPU feature leaves no cache trace at all. CH_ENABLE_VEHICLE_SCM_GPU is the
+#    request, not the result: it stays ON even when no HIP toolchain is found and the
+#    feature resolves to NONE. The generated CHRONO_HAS_SCM_GPU define is the only
+#    reliable evidence that it actually resolved, so check the header, not the cache.
+verify_configuration() {
+    local failed=0 m
+
+    for m in VEHICLE SENSOR ROS PYTHON SYNCHRONO; do
+        if ! grep -qx "CH_ENABLE_MODULE_${m}:BOOL=ON" CMakeCache.txt; then
+            echo "  FAIL: CH_ENABLE_MODULE_${m} was requested ON but did not stay ON." >&2
+            failed=1
+        fi
+    done
+
+    if ! grep -qE "^#define CHRONO_HAS_SCM_GPU" chrono_vehicle/ChConfigVehicle.h 2>/dev/null; then
+        echo "  FAIL: SCM GPU resolved to NONE -- no HIP toolchain found." >&2
+        echo "        The SCM kernels are HIP-only; on NVIDIA they still need ROCm's HIP" >&2
+        echo "        headers. Terrain would silently run on the CPU." >&2
+        failed=1
+    fi
+
+    [ ${failed} -eq 0 ] || die "CMake did not resolve the requested configuration (see above)."
+    echo "Configuration verified: all requested modules enabled, SCM GPU resolved."
+}
+
 has_blaze_headers() {
     local include_dir=$1
     [ -f "${include_dir}/blaze/system/Version.h" ]
@@ -216,7 +251,7 @@ ensure_fmu_forge_available() {
 
     default_fmu_forge_dir="$(pwd)/src/chrono_thirdparty/fmu-forge"
 
-    if [ -f "${FMU_FORGE_DIR}/fmi2/FmuToolsImport.h" ]; then
+    if [ -f "${FMU_FORGE_DIR}/fmi2/FmuForgeImport.h" ]; then
         echo "Using fmu-forge from ${FMU_FORGE_DIR}"
         return
     fi
@@ -230,7 +265,7 @@ ensure_fmu_forge_available() {
     echo "fmu-forge headers not found. Initializing Chrono fmu-forge submodule..."
     git submodule update --init --recursive src/chrono_thirdparty/fmu-forge || die "Unable to initialize fmu-forge submodule."
 
-    [ -f "${FMU_FORGE_DIR}/fmi2/FmuToolsImport.h" ] || die "fmu-forge submodule initialized, but fmi2/FmuToolsImport.h is still missing."
+    [ -f "${FMU_FORGE_DIR}/fmi2/FmuForgeImport.h" ] || die "fmu-forge submodule initialized, but fmi2/FmuForgeImport.h is still missing."
 }
 
 ensure_flatbuffers_available() {
@@ -326,7 +361,7 @@ cmake ../ -G Ninja \
         -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
         -Dblaze_INCLUDE_DIR=${BLAZE_INCLUDE_DIR} \
         -DEigen3_DIR=/usr/lib/cmake/eigen3 \
-        -DOptiX_INCLUDE_DIR=${OPTIX_INSTALL_DIR}/include \
+        -DOptiX_INCLUDE=${OPTIX_INSTALL_DIR}/include \
         -DOptiX_INSTALL_DIR=${OPTIX_INSTALL_DIR} \
         -Dvsg_DIR=${VSG_PREFIX}/lib/cmake/vsg \
         -DvsgImGui_DIR=${VSG_PREFIX}/lib/cmake/vsgImGui \
@@ -342,6 +377,10 @@ cmake ../ -G Ninja \
         -DCH_USE_SENSOR_NVRTC=OFF \
         -DNUMPY_INCLUDE_DIR=${NUMPY_INC} \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}"
+
+echo "Verifying CMake resolved the requested configuration..."
+verify_configuration
+
 ninja ${NINJA_FLAGS} && ninja ${NINJA_FLAGS} install || {
     echo "Build failed! Re-run with NINJA_FLAGS='-j1 -v' ./buildChronoInMount.sh to show the exact failing command." >&2
     exit 1

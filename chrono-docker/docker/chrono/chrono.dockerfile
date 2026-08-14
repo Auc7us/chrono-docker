@@ -44,6 +44,8 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
     libxxf86vm-dev \
     freeglut3-dev \
     python3-numpy \
+    libopenmpi-dev \
+    openmpi-bin \
     libglu1-mesa-dev \
     libglew-dev \
     libglfw3-dev \
@@ -63,6 +65,33 @@ RUN wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | tee /etc/
     wget -qO /etc/apt/sources.list.d/lunarg-vulkan.list "http://packages.lunarg.com/vulkan/lunarg-vulkan-${UBUNTU_CODENAME}.list" && \
     apt update && \
     apt install --no-install-recommends -y vulkan-sdk
+
+# ROCm / HIP.
+#
+# Chrono::Vehicle's SCM GPU backend has no CUDA sources -- its kernels exist only in
+# HIP. On NVIDIA hosts they compile through HIP's NVIDIA platform, where the HIP
+# compiler resolves to nvcc, but that still needs ROCm's HIP headers present. So this
+# is required on NVIDIA machines too, not just AMD ones.
+#
+# Without it the failure is silent, not loud: CHRONO_HIP_FOUND is FALSE, the SCM GPU
+# feature resolves to NONE, CH_ENABLE_VEHICLE_SCM_GPU stays ON in the cache because
+# that is the request rather than the result, and the terrain quietly runs on the CPU.
+# buildChronoInMount.sh checks the generated CHRONO_HAS_SCM_GPU define to catch this.
+#
+# Version-pinned: the repo publishes one suite per version path.
+ARG ROCM_VERSION="7.2.4"
+RUN mkdir -p /etc/apt/keyrings && \
+    wget -qO- https://repo.radeon.com/rocm/rocm.gpg.key | gpg --dearmor -o /etc/apt/keyrings/rocm.gpg && \
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/${ROCM_VERSION} $(lsb_release -cs) main" \
+        > /etc/apt/sources.list.d/rocm.list && \
+    apt-get update && \
+    apt-get install --no-install-recommends -y \
+        rocm-core \
+        hip-dev \
+        hip-runtime-amd \
+        hipcc \
+        rocm-llvm \
+        comgr
 
 # Clean up to reduce image size
 RUN apt-get clean && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
@@ -128,8 +157,17 @@ ENV USERSHELLPROFILE=${USERSHELLPROFILE}
 ENV ROS_DISTRO=${ROS_DISTRO}
 ENV VSG_FILE_PATH=${USERHOME}/mountdir/packages/vsg/share/vsgExamples
 ENV XDG_RUNTIME_DIR=/tmp/runtime-${USERNAME}
-RUN echo "export PYTHONPATH=\"${USERHOME}/mountdir/lib/chrono-build/share/chrono/python:${USERHOME}/mountdir/chrono/build/bin:\$PYTHONPATH\"" >> ${USERSHELLPROFILE}
-RUN echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:${USERHOME}/mountdir/lib/chrono-build/lib:${USERHOME}/mountdir/packages/vsg/lib:${USERHOME}/mountdir/packages/urdf/lib" >> ${USERSHELLPROFILE}
+# The build tree leads on both paths, and the install prefix is a fallback only.
+# The install refreshes only when buildChronoInMount.sh runs its install step, so it
+# goes stale against an actively rebuilt tree; whenever it leads, the stale copy wins
+# and the rebuild appears to have no effect.
+#
+# LD_LIBRARY_PATH omits the install prefix entirely: the binaries carry DT_RUNPATH
+# pointing at chrono/build/lib, and LD_LIBRARY_PATH is searched BEFORE RUNPATH, so any
+# entry here overrides the tree the binary was linked against -- appending is not
+# enough to make it a fallback. Add it back only to run against an installed Chrono.
+RUN echo "export PYTHONPATH=\"${USERHOME}/mountdir/chrono/build/bin:${USERHOME}/mountdir/lib/chrono-build/share/chrono/python:\$PYTHONPATH\"" >> ${USERSHELLPROFILE}
+RUN echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:${USERHOME}/mountdir/packages/vsg/lib:${USERHOME}/mountdir/packages/urdf/lib" >> ${USERSHELLPROFILE}
 RUN echo "export VSG_FILE_PATH=\"${VSG_FILE_PATH}\"" >> ${USERSHELLPROFILE}
 RUN echo "export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR}\"" >> ${USERSHELLPROFILE}
 

@@ -12,3 +12,6 @@ chrono-docker/mountdir/*
 !chrono-docker/mountdir/lib/chrono-build/
 chrono-docker/mountdir/lib/chrono-build/*
 !chrono-docker/mountdir/lib/chrono-build/readme.md
+
+# Local working clones of this repo (contrib, etc). Not pushed.
+chrono-docker-*/
