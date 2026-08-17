@@ -93,6 +93,28 @@ RUN mkdir -p /etc/apt/keyrings && \
         rocm-llvm \
         comgr
 
+# CMake.
+#
+# The apt cmake installed above is 3.22.1 on Ubuntu 22.04, and that is too old for the
+# SCM GPU backend on NVIDIA. Chrono only searches for HIP on an NVIDIA host when
+# CHRONO_ENABLE_HIP_ON_NVIDIA is honored, and cmake/ChronoGPUDetect.cmake gates that on
+# CMake >= 3.28, because driving the HIP language with CMAKE_HIP_PLATFORM=nvidia needs
+# 3.28. Below that the ROCm search never runs at all: CHRONO_ROCM_ROOT stays empty, no
+# CMAKE_HIP_* entries are written, CHRONO_HIP_FOUND is FALSE, and the SCM GPU feature
+# resolves to NONE -- with a fully working ROCm install sitting right there in /opt/rocm.
+#
+# Chrono's own cmake_minimum_required is 3.18, so 3.22 configures without complaint and
+# the loss is silent. That is what made this worth pinning in the image rather than
+# leaving to whatever cmake happens to be on PATH.
+#
+# The pip wheel, not Kitware's apt repo: 22.04 has no apt path to >= 3.28, and this is
+# the exact version that built this tree end to end (all modules plus the VSG, urdfdom
+# and flatbuffers sub-builds driven by buildChronoInMount.sh). Installed as root so it
+# lands in /usr/local/bin, which precedes /usr/bin on PATH and so wins over the apt one.
+ARG CMAKE_VERSION="4.4.0"
+RUN pip install --no-cache-dir "cmake==${CMAKE_VERSION}" && \
+    cmake --version | grep -q "${CMAKE_VERSION}" || (echo "Error: cmake ${CMAKE_VERSION} is not first on PATH" && exit 1)
+
 # Clean up to reduce image size
 RUN apt-get clean && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 

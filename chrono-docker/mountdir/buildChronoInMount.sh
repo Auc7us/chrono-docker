@@ -23,6 +23,35 @@ die() {
     exit 1
 }
 
+# Minimum CMake for the SCM GPU backend on NVIDIA.
+#
+# cmake/ChronoGPUDetect.cmake only requests the HIP platform when CMake is at least this
+# new, because CMAKE_HIP_PLATFORM=nvidia needs 3.28. Below it the ROCm search is skipped
+# entirely, so a perfectly good /opt/rocm goes unused and SCM GPU resolves to NONE.
+CHRONO_MIN_CMAKE_VERSION=3.28
+
+# Checked here rather than left to verify_configuration, which runs after a full
+# configure and can only report the symptom ("no HIP toolchain found") -- wording that
+# sends you looking at ROCm when ROCm was never the problem. The image pins cmake 4.4.0
+# into /usr/local/bin; this catches a stale image, or a PATH that puts the apt cmake
+# (3.22.1 on Ubuntu 22.04) first, in about a second.
+verify_cmake_version() {
+    local version
+    command -v cmake >/dev/null 2>&1 || die "cmake not found on PATH."
+    version=$(cmake --version | head -n 1 | awk '{print $3}')
+
+    if [ "$(printf '%s\n%s\n' "${CHRONO_MIN_CMAKE_VERSION}" "${version}" | sort -V | head -n 1)" \
+         != "${CHRONO_MIN_CMAKE_VERSION}" ]; then
+        echo "  Found cmake ${version} at $(command -v cmake)." >&2
+        echo "  The SCM GPU backend needs >= ${CHRONO_MIN_CMAKE_VERSION} on NVIDIA: below that," >&2
+        echo "  Chrono never searches for HIP and the terrain silently runs on the CPU." >&2
+        echo "  Chrono's own cmake_minimum_required is 3.18, so cmake will NOT complain." >&2
+        die "cmake ${version} is too old (need >= ${CHRONO_MIN_CMAKE_VERSION})."
+    fi
+
+    echo "Using cmake ${version} from $(command -v cmake)."
+}
+
 # Assert that CMake resolved what we asked for. Run from the build directory, after
 # cmake and before ninja, so a misconfiguration costs seconds instead of a full build.
 #
@@ -51,6 +80,9 @@ verify_configuration() {
         echo "  FAIL: SCM GPU resolved to NONE -- no HIP toolchain found." >&2
         echo "        The SCM kernels are HIP-only; on NVIDIA they still need ROCm's HIP" >&2
         echo "        headers. Terrain would silently run on the CPU." >&2
+        echo "        Check the configure log for 'Searching for HIP'. If it never appeared," >&2
+        echo "        the ROCm search was skipped rather than failing, which points at the" >&2
+        echo "        CMake version (see verify_cmake_version) and not at ROCm." >&2
         failed=1
     fi
 
@@ -150,6 +182,31 @@ ensure_optix_installed() {
     echo "OptiX installed to ${OPTIX_INSTALL_DIR}"
 }
 
+# Keep build output out of "git status" in the Chrono clone.
+#
+# buildURDF.sh and buildVSG.sh clone and build their dependencies into download_urdf/ and
+# download_vsg/ at the source root. Chrono's committed .gitignore covers build/ but not
+# those two, so they sit there as untracked directories -- thousands of files that a
+# git add -A would happily stage. This clone is also where upstream contributions are
+# prepared, which makes that a live hazard rather than a cosmetic one.
+#
+# .git/info/exclude rather than .gitignore: these are artifacts of how this container
+# builds Chrono, not a property of the project, so the rule belongs to the clone and must
+# never end up in a commit. Appended idempotently; an existing exclude file is preserved.
+ensure_local_git_excludes() {
+    local exclude_file=".git/info/exclude"
+    local entry
+
+    [ -d .git ] || return 0
+
+    mkdir -p "$(dirname "${exclude_file}")"
+    for entry in download_urdf/ download_vsg/; do
+        if ! grep -qxF "${entry}" "${exclude_file}" 2>/dev/null; then
+            printf '%s\n' "${entry}" >> "${exclude_file}"
+        fi
+    done
+}
+
 patch_vsg_build_script() {
     local script_path="contrib/build-scripts/linux/buildVSG.sh"
     local tmp_file
@@ -180,66 +237,27 @@ patch_vsg_build_script() {
     fi
 }
 
-patch_multicore_thrust_header() {
-    local header_path="src/chrono/multicore_math/thrust.h"
-    local tmp_file
-
-    [ -f "${header_path}" ] || die "Chrono multicore Thrust header not found at ${header_path}."
-
-    if ! grep -q "#include <iterator>" "${header_path}"; then
-        tmp_file=$(mktemp)
-        awk '{
-            print
-            if ($0 == "#include <iostream>") {
-                print "#include <iterator>"
-            }
-        }' "${header_path}" > "${tmp_file}"
-        cat "${tmp_file}" > "${header_path}"
-        rm -f "${tmp_file}"
-    fi
-
-    if ! grep -q "#include <thrust/distance.h>" "${header_path}"; then
-        tmp_file=$(mktemp)
-        awk '{
-            print
-            if ($0 == "#include <thrust/copy.h>") {
-                print "#include <thrust/distance.h>"
-                print "#include <thrust/advance.h>"
-            }
-        }' "${header_path}" > "${tmp_file}"
-        cat "${tmp_file}" > "${header_path}"
-        rm -f "${tmp_file}"
-    fi
-
-    if grep -q "thrust::iterator_difference" "${header_path}"; then
-        sed -i \
-            -e 's/typename thrust::iterator_difference<InputIterator1>::type/typename std::iterator_traits<InputIterator1>::difference_type/g' \
-            "${header_path}"
-    fi
-}
-
-patch_python_fea_swig_flags() {
-    local cmake_path="src/chrono_swig/chrono_python/CMakeLists.txt"
-    local tmp_file
-
-    [ -f "${cmake_path}" ] || die "Chrono Python SWIG CMake file not found at ${cmake_path}."
-
-    if ! grep -q -- "-DCHRONO_FEA" "${cmake_path}"; then
-        tmp_file=$(mktemp)
-        awk '
-            /if\(CH_ENABLE_MODULE_VSG\)/ && ! inserted {
-                print "if(CH_ENABLE_MODULE_FEA)"
-                print "  set(CMAKE_SWIG_FLAGS \"${CMAKE_SWIG_FLAGS};-DCHRONO_FEA\")"
-                print "endif()"
-                print ""
-                inserted = 1
-            }
-            { print }
-        ' "${cmake_path}" > "${tmp_file}"
-        cat "${tmp_file}" > "${cmake_path}"
-        rm -f "${tmp_file}"
-    fi
-}
+# Removed: patch_multicore_thrust_header.
+#
+# It worked around Thrust 3.x / CUDA 13 fallout in src/chrono/multicore_math/thrust.h.
+# Upstream has since absorbed the real fix: the header now includes <iterator> with a
+# comment naming std::distance / std::advance / std::iterator_traits as the reason, and
+# Thrust_Expand() uses the std:: forms rather than thrust::iterator_difference. Two of
+# the three patch blocks were already no-ops against that tree; the third kept injecting
+# <thrust/distance.h> and <thrust/advance.h>, which nothing in the file uses any more.
+#
+# Removed: patch_python_fea_swig_flags.
+#
+# Not because it was unnecessary -- the flag is load-bearing, ~19 .i files gate content
+# on "#ifdef CHRONO_FEA" and without it PyChrono loses its FEA bindings silently -- but
+# because it does not need to be a source patch. CMAKE_SWIG_FLAGS is append-only in
+# chrono_python/CMakeLists.txt (every touch is set(... "${CMAKE_SWIG_FLAGS};...") or
+# list(APPEND ...), never a reset), so seeding it from the cmake command line reaches the
+# same place with a dirty working tree. See the -DCMAKE_SWIG_FLAGS argument below.
+#
+# Both patches modified files tracked by the Chrono repo, which is a hazard when this
+# same clone is used to prepare upstream contributions: a git commit -a or git add -A
+# sweeps them into a branch. Keeping the tree clean is the point.
 
 cd "$(dirname "$0")"
 cd chrono
@@ -290,6 +308,8 @@ mkdir -p "${PACKAGE_DIR}"
 echo "Ensuring Blaze 3.8 headers are present..."
 ensure_blaze_headers
 
+ensure_local_git_excludes
+
 echo "Ensuring OptiX is installed..."
 ensure_optix_installed
 
@@ -299,17 +319,17 @@ if [ ! -d "${PACKAGE_DIR}/urdf" ]; then
 fi
 
 echo "Ensuring VSG dependencies are built..."
-patch_vsg_build_script
+# Patched only when VSG is actually about to be built. It used to run unconditionally,
+# which left contrib/build-scripts/linux/buildVSG.sh modified on every run even though
+# the build below is skipped whenever VSG is already installed -- a tracked file dirtied
+# for nothing, in a clone that is also used to prepare upstream contributions.
 if [ ! -f "${VSG_PREFIX}/lib/cmake/vsg/vsgConfig.cmake" ] || \
    [ ! -f "${VSG_PREFIX}/lib/cmake/vsgXchange/vsgXchangeConfig.cmake" ] || \
    [ ! -f "${VSG_PREFIX}/lib/cmake/vsgImGui/vsgImGuiConfig.cmake" ]; then
+    patch_vsg_build_script
     rm -rf "${VSG_PREFIX}"
     bash contrib/build-scripts/linux/buildVSG.sh "${VSG_PREFIX}"
 fi
-
-echo "Ensuring Chrono CUDA 13.2 compatibility patches are applied..."
-patch_multicore_thrust_header
-patch_python_fea_swig_flags
 
 echo "Ensuring FMI dependencies are present..."
 ensure_fmu_forge_available
@@ -332,6 +352,8 @@ import numpy
 print(numpy.get_include())
 PY
 )
+
+verify_cmake_version
 
 mkdir -p build && cd build
 echo "Running cmake..."
@@ -375,6 +397,7 @@ cmake ../ -G Ninja \
         -DCMAKE_PREFIX_PATH="${URDF_PREFIX};${URDF_PREFIX}/CMake;${URDF_PREFIX}/lib/cmake/tinyxml2;${VSG_PREFIX}" \
         -DCMAKE_LIBRARY_PATH=${CUDA_STUBS} \
         -DCH_USE_SENSOR_NVRTC=OFF \
+        -DCMAKE_SWIG_FLAGS="-DCHRONO_FEA" \
         -DNUMPY_INCLUDE_DIR=${NUMPY_INC} \
         -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}"
 
