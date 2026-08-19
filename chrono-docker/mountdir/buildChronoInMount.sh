@@ -357,7 +357,20 @@ verify_cmake_version
 
 mkdir -p build && cd build
 echo "Running cmake..."
+# CH_USE_SENSOR_OPTIX must be requested explicitly. Upstream #795 (e4e1946b38,
+# 2026-08-03) added the Vulkan RT camera backend and made it the default, demoting
+# OptiX to an opt-in "legacy" feature -- so the option flipped from on to off under a
+# build script that had never needed to name it. find_package(OptiX) lives INSIDE that
+# if() block, which is why the OptiX_INSTALL_DIR/OptiX_INCLUDE paths below were being
+# ignored: nothing searched for them, and they sat in the cache as UNINITIALIZED.
+#
+# Measured on this box (RTX 4080, i7-13700K, 4 robots): wall/sim 24 against the Jul-8
+# OptiX build, 74-92 after the Aug-17 rebuild took the Vulkan RT default. Same demo
+# commit, same host, both Release, so the backend swap is the difference that was found
+# -- not that it has been isolated with --no_sensor yet. OptiX is the known-good config,
+# which is reason enough to keep asking for it here.
 cmake ../ -G Ninja \
+        -DCH_USE_SENSOR_OPTIX=ON \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_DEMOS=ON \
         -DBUILD_BENCHMARKING=OFF \
